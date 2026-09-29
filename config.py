@@ -26,3 +26,9 @@ CHANNEL_1_BUTTON = "📢 Join Channel 1"
 CHANNEL_2_BUTTON = "📢 Join Channel 2"
 
 CHECK_JOIN_BUTTON = "✅ Check Join"
+
+# ==========================================
+# DATABASE
+# ==========================================
+
+DATABASE_FILE = "database/raunak_mm.db"
