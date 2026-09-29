@@ -11,8 +11,8 @@ ADMIN_CHAT_ID = 8115436142, 7331380618
 # REQUIRED CHANNELS
 # ==============================
 
-CHANNEL_1 = "@sfreset"
-CHANNEL_1_LINK = "https://t.me/sfreset"
+CHANNEL_1 = "@sf_reset"
+CHANNEL_1_LINK = "https://t.me/sf_reset"
 
 CHANNEL_2 = "@rounakvoucher"
 CHANNEL_2_LINK = "https://t.me/rounakvoucher"
