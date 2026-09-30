@@ -1,3 +1,5 @@
+from config import MM_CHAT_ID, ADMIN_IDS
+
 from database.database import (
     save_user,
     create_deal,
@@ -6,7 +8,7 @@ from database.database import (
 
 
 # ==========================================
-# EXTRACT MENTIONED USERS
+# EXTRACT USERS
 # ==========================================
 
 def extract_users_from_message(message, bot):
@@ -18,10 +20,6 @@ def extract_users_from_message(message, bot):
 
     for entity in message.entities:
 
-        # ----------------------------------
-        # Text Mention
-        # ----------------------------------
-
         if entity.type == "text_mention":
 
             user = entity.user
@@ -29,14 +27,9 @@ def extract_users_from_message(message, bot):
             if user and not user.is_bot:
                 users.append(user)
 
-        # ----------------------------------
-        # Normal @username mention
-        # ----------------------------------
-
         elif entity.type == "mention":
 
             try:
-
                 username = message.text[
                     entity.offset + 1:
                     entity.offset + entity.length
@@ -50,23 +43,16 @@ def extract_users_from_message(message, bot):
                     users.append(chat)
 
             except Exception as error:
-
                 print(
                     f"Username lookup error: {error}"
                 )
 
-    # --------------------------------------
-    # Remove duplicates
-    # --------------------------------------
-
     unique_users = []
-
     seen_ids = set()
 
     for user in users:
 
         if user.id not in seen_ids:
-
             seen_ids.add(user.id)
             unique_users.append(user)
 
@@ -79,10 +65,22 @@ def extract_users_from_message(message, bot):
 
 def register_deal(bot):
 
-    @bot.message_handler(
-        commands=["deal"]
-    )
+    @bot.message_handler(commands=["deal"])
     def deal_command(message):
+
+        # ==================================
+        # MM / ADMIN PERMISSION
+        # ==================================
+
+        if message.from_user.id != MM_CHAT_ID:
+
+            if message.from_user.id in ADMIN_IDS:
+                bot.reply_to(
+                    message,
+                    "⚠️ Sirf MM ye command use kar sakta hai."
+                )
+
+            return
 
         # ==================================
         # GROUP ONLY
@@ -101,7 +99,7 @@ def register_deal(bot):
             return
 
         # ==================================
-        # CHECK EXISTING ACTIVE DEAL
+        # CHECK ACTIVE DEAL
         # ==================================
 
         existing_deal = get_active_deal(
@@ -133,7 +131,7 @@ def register_deal(bot):
         )
 
         # ==================================
-        # EXACTLY 2 USERS REQUIRED
+        # TWO USERS REQUIRED
         # ==================================
 
         if len(users) != 2:
@@ -182,17 +180,15 @@ def register_deal(bot):
         )
 
         # ==================================
-        # USER DISPLAY
+        # USER DETAILS
         # ==================================
 
         user_1_name = (
-            user_1.first_name
-            or "Unknown"
+            user_1.first_name or "Unknown"
         )
 
         user_2_name = (
-            user_2.first_name
-            or "Unknown"
+            user_2.first_name or "Unknown"
         )
 
         user_1_username = (
@@ -225,7 +221,8 @@ def register_deal(bot):
             "━━━━━━━━━━━━━━━━━━\n\n"
 
             f"🤝 <b>Deal ID:</b> #{deal_id}\n"
-            f"💬 <b>Group ID:</b> <code>{message.chat.id}</code>\n"
+            f"💬 <b>Group ID:</b> "
+            f"<code>{message.chat.id}</code>\n"
             "⏳ <b>Status:</b> Active"
         )
 
@@ -233,4 +230,4 @@ def register_deal(bot):
             message.chat.id,
             text,
             parse_mode="HTML"
-        )
+            )
