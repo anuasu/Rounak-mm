@@ -10,7 +10,6 @@ from handlers.admin_reply import register_admin_reply
 from commands.leaderboard import register_leaderboard
 from commands.search_user import register_user_search
 from commands.deal import register_deal
-from commands.deal import register_deal_info
 
 
 
@@ -26,7 +25,7 @@ register_admin_reply(bot)
 register_leaderboard(bot)
 register_user_search(bot)
 register_deal(bot)
-register_deal_info(bot)
+
 
 print("🤖 Raunak MM Bot is starting...")
 
