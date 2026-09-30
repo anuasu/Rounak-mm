@@ -13,6 +13,10 @@ from commands.deal import register_deal
 from commands.removedeal import register_removedeal
 from commands.payment import register_payment
 from commands.mm_fee import register_mm_fee
+from commands.qr import register_qr
+
+
+
 
 init_database()
 
@@ -29,6 +33,9 @@ register_deal(bot)
 register_removedeal(bot)
 register_payment(bot)
 register_mm_fee(bot)
+register_qr(bot)
+
+
 
 print("🤖 Raunak MM Bot is starting...")
 
