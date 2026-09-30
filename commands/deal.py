@@ -8,73 +8,14 @@ from database.database import (
 
 
 # ==========================================
-# GET 2 USERS FROM TELEGRAM MENTIONS
+# TEMPORARY DEAL USERS
 # ==========================================
 
-def get_mentioned_users(message, bot):
+pending_deal_users = {}
 
-    users = []
-
-    if not message.entities:
-        return users
-
-    for entity in message.entities:
-
-        # ==================================
-        # TELEGRAM USER SELECT MENTION
-        # ==================================
-
-        if entity.type == "text_mention":
-
-            user = entity.user
-
-            if user and not user.is_bot:
-                users.append(user)
-
-        # ==================================
-        # @USERNAME
-        # ==================================
-
-        elif entity.type == "mention":
-
-            username = message.text[
-                entity.offset + 1:
-                entity.offset + entity.length
-            ]
-
-            try:
-
-                chat = bot.get_chat(
-                    "@" + username
-                )
-
-                if chat.type == "private":
-                    users.append(chat)
-
-            except Exception as error:
-
-                print(
-                    f"Username error @{username}: {error}"
-                )
-
-    # ==================================
-    # REMOVE DUPLICATES
-    # ==================================
-
-    unique_users = []
-    seen_ids = set()
-
-    for user in users:
-
-        if user.id not in seen_ids:
-
-            seen_ids.add(user.id)
-            unique_users.append(user)
-
-    return unique_users
 
 # ==========================================
-# REGISTER DEAL COMMAND
+# REGISTER DEAL
 # ==========================================
 
 def register_deal(bot):
@@ -82,7 +23,7 @@ def register_deal(bot):
     @bot.message_handler(
         func=lambda message:
         message.text
-        and message.text.lower().startswith(".deal")
+        and message.text.lower().strip() == ".deal"
     )
     def deal_command(message):
 
@@ -118,22 +59,99 @@ def register_deal(bot):
             return
 
         # ==================================
-        # CHECK ACTIVE DEAL
+        # MUST REPLY TO USER MESSAGE
+        # ==================================
+
+        if not message.reply_to_message:
+
+            bot.reply_to(
+                message,
+                (
+                    "⚠️ Kisi user ke message ko "
+                    "reply karke <code>.deal</code> bhejo."
+                ),
+                parse_mode="HTML"
+            )
+
+            return
+
+        replied_user = (
+            message.reply_to_message.from_user
+        )
+
+        # ==================================
+        # BOT CHECK
+        # ==================================
+
+        if not replied_user:
+
+            bot.reply_to(
+                message,
+                "❌ User identify nahi ho paya."
+            )
+
+            return
+
+        if replied_user.is_bot:
+
+            bot.reply_to(
+                message,
+                "❌ Bot ko deal mein add nahi kar sakte."
+            )
+
+            return
+
+        # ==================================
+        # CHECK EXISTING ACTIVE DEAL
         # ==================================
 
         existing_deal = get_active_deal(
             message.chat.id
         )
 
-        if existing_deal:
+        # ==================================
+        # FIRST USER
+        # ==================================
+
+        if not existing_deal:
+
+            pending_deal_users[
+                message.chat.id
+            ] = replied_user.id
+
+            # Save user immediately
+
+            save_user(
+                chat_id=replied_user.id,
+                first_name=replied_user.first_name or "",
+                username=replied_user.username or ""
+            )
+
+            username_text = (
+                f"@{replied_user.username}"
+                if replied_user.username
+                else "No Username"
+            )
 
             bot.reply_to(
                 message,
                 (
-                    "⚠️ Is group mein already "
-                    f"<b>Deal #{existing_deal['deal_id']}</b> "
-                    "active hai.\n\n"
-                    "Pehle current deal complete karo."
+                    "✅ <b>User 1 added</b>\n\n"
+
+                    f"👤 <b>Name:</b> "
+                    f"{replied_user.first_name or 'Unknown'}\n"
+
+                    f"🔗 <b>Username:</b> "
+                    f"{username_text}\n"
+
+                    f"🆔 <b>Chat ID:</b> "
+                    f"<code>{replied_user.id}</code>\n\n"
+
+                    "➡️ Ab <b>dusre user</b> ke message ko "
+                    "reply karke dobara:\n"
+                    "<code>.deal</code>\n\n"
+
+                    "likho."
                 ),
                 parse_mode="HTML"
             )
@@ -141,100 +159,113 @@ def register_deal(bot):
             return
 
         # ==================================
-        # GET MENTIONED USERS
+        # SECOND USER
         # ==================================
 
-        users = get_mentioned_users(message, bot)
-
-        # ==================================
-        # EXACTLY 2 USERS
-        # ==================================
-
-        if len(users) != 2:
-
-            bot.reply_to(
-                message,
-                (
-                    "⚠️ <b>2 users ko Telegram mention "
-                    "ke through select karo.</b>\n\n"
-
-                    "Example:\n"
-                    "<code>.deal @User1 @User2</code>\n\n"
-
-                    "Username ko sirf text ki tarah type "
-                    "mat karo. Telegram ka user mention "
-                    "select karo."
-                ),
-                parse_mode="HTML"
-            )
-
-            return
-
-        # ==================================
-        # USER DATA
-        # ==================================
-
-        user_1 = users[0]
-        user_2 = users[1]
-
-        # ==================================
-        # SAVE USER 1
-        # ==================================
-
-        save_user(
-            chat_id=user_1.id,
-            first_name=user_1.first_name or "",
-            username=user_1.username or ""
+        user_1_id = pending_deal_users.get(
+            message.chat.id
         )
+
+        if not user_1_id:
+
+            bot.reply_to(
+                message,
+                "⚠️ Pehle User 1 select karo."
+            )
+
+            return
+
+        user_2_id = replied_user.id
+
+        # ==================================
+        # SAME USER CHECK
+        # ==================================
+
+        if user_1_id == user_2_id:
+
+            bot.reply_to(
+                message,
+                "⚠️ Same user ko dono side add nahi kar sakte."
+            )
+
+            return
 
         # ==================================
         # SAVE USER 2
         # ==================================
 
         save_user(
-            chat_id=user_2.id,
-            first_name=user_2.first_name or "",
-            username=user_2.username or ""
+            chat_id=replied_user.id,
+            first_name=replied_user.first_name or "",
+            username=replied_user.username or ""
         )
 
         # ==================================
-        # CREATE ACTIVE DEAL
+        # CREATE DEAL
         # ==================================
 
         deal_id = create_deal(
             group_chat_id=message.chat.id,
-            user_1_id=user_1.id,
-            user_2_id=user_2.id
+            user_1_id=user_1_id,
+            user_2_id=user_2_id
         )
+
+        # ==================================
+        # GET USER 1 DETAILS
+        # ==================================
+
+        try:
+
+            user_1 = bot.get_chat(user_1_id)
+
+        except Exception:
+
+            user_1 = None
 
         # ==================================
         # USER 1 DISPLAY
         # ==================================
 
-        user_1_name = (
-            user_1.first_name
-            or "Unknown"
-        )
+        if user_1:
 
-        user_1_username = (
-            f"@{user_1.username}"
-            if user_1.username
-            else "No Username"
-        )
+            user_1_name = (
+                user_1.first_name
+                or "Unknown"
+            )
+
+            user_1_username = (
+                f"@{user_1.username}"
+                if user_1.username
+                else "No Username"
+            )
+
+        else:
+
+            user_1_name = "Unknown"
+            user_1_username = "No Username"
 
         # ==================================
         # USER 2 DISPLAY
         # ==================================
 
         user_2_name = (
-            user_2.first_name
+            replied_user.first_name
             or "Unknown"
         )
 
         user_2_username = (
-            f"@{user_2.username}"
-            if user_2.username
+            f"@{replied_user.username}"
+            if replied_user.username
             else "No Username"
+        )
+
+        # ==================================
+        # REMOVE TEMP DATA
+        # ==================================
+
+        pending_deal_users.pop(
+            message.chat.id,
+            None
         )
 
         # ==================================
@@ -244,13 +275,15 @@ def register_deal(bot):
         text = (
             "🤝 <b>DEAL ADDED</b>\n\n"
 
-            f"👤 <b>User 1:</b> {user_1_name}\n"
+            f"👤 <b>User 1:</b> "
+            f"{user_1_name}\n"
             f"🔗 {user_1_username}\n"
-            f"🆔 <code>{user_1.id}</code>\n\n"
+            f"🆔 <code>{user_1_id}</code>\n\n"
 
-            f"👤 <b>User 2:</b> {user_2_name}\n"
+            f"👤 <b>User 2:</b> "
+            f"{user_2_name}\n"
             f"🔗 {user_2_username}\n"
-            f"🆔 <code>{user_2.id}</code>\n\n"
+            f"🆔 <code>{user_2_id}</code>\n\n"
 
             "━━━━━━━━━━━━━━━━━━\n\n"
 
