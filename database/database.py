@@ -77,6 +77,15 @@ def init_database():
     # ======================================
     # SAVE + CLOSE
     # ======================================
+    
+    
+    
+    cursor.execute("""
+    CREATE TABLE IF NOT EXISTS qr_settings (
+        qr_number INTEGER PRIMARY KEY,
+        image_file_id TEXT
+    )
+""")
 
     connection.commit()
     connection.close()
@@ -572,3 +581,52 @@ def set_mm_fee_image(image_file_id):
 
     connection.commit()
     connection.close()
+    
+def set_qr(qr_number, image_file_id):
+
+    connection = get_connection()
+    cursor = connection.cursor()
+
+    cursor.execute("""
+        INSERT INTO qr_settings (
+            qr_number,
+            image_file_id
+        )
+        VALUES (?, ?)
+
+        ON CONFLICT(qr_number)
+        DO UPDATE SET
+            image_file_id = excluded.image_file_id
+    """, (
+        qr_number,
+        image_file_id
+    ))
+
+    connection.commit()
+    connection.close()
+
+
+def get_qr(qr_number):
+
+    connection = get_connection()
+    cursor = connection.cursor()
+
+    cursor.execute("""
+        SELECT image_file_id
+        FROM qr_settings
+        WHERE qr_number = ?
+    """, (
+        qr_number,
+    ))
+
+    result = cursor.fetchone()
+
+    connection.close()
+
+    if result:
+        return result["image_file_id"]
+
+    return None
+    
+    
+    
