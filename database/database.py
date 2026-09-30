@@ -38,28 +38,30 @@ def init_database():
         )
     """)
 
-    # ======================================
-    # DEALS
-    # ======================================
+# ======================================
+# DEALS
+# ======================================
 
     cursor.execute("""
         CREATE TABLE IF NOT EXISTS deals (
-            deal_id INTEGER PRIMARY KEY AUTOINCREMENT,
+        deal_id INTEGER PRIMARY KEY AUTOINCREMENT,
 
-            user_1_id INTEGER,
-            user_2_id INTEGER,
+        group_chat_id INTEGER,
 
-            deal_amount REAL DEFAULT 0,
-            mm_fee REAL DEFAULT 0,
-            total_received REAL DEFAULT 0,
-            holding_amount REAL DEFAULT 0,
+        user_1_id INTEGER,
+        user_2_id INTEGER,
 
-            status TEXT DEFAULT 'pending',
+        deal_amount REAL DEFAULT 0,
+        mm_fee REAL DEFAULT 0,
+        total_received REAL DEFAULT 0,
+        holding_amount REAL DEFAULT 0,
 
-            created_at TEXT,
-            completed_at TEXT
-        )
-    """)
+        status TEXT DEFAULT 'pending',
+
+        created_at TEXT,
+        completed_at TEXT
+    )
+""")
 
     connection.commit()
     connection.close()
@@ -132,6 +134,7 @@ def get_user(chat_id):
 # ==========================================
 
 def create_deal(
+    group_chat_id,
     user_1_id,
     user_2_id,
     deal_amount=0,
@@ -147,6 +150,7 @@ def create_deal(
 
     cursor.execute("""
         INSERT INTO deals (
+            group_chat_id,
             user_1_id,
             user_2_id,
             deal_amount,
@@ -156,8 +160,9 @@ def create_deal(
             status,
             created_at
         )
-        VALUES (?, ?, ?, ?, ?, ?, 'pending', ?)
+        VALUES (?, ?, ?, ?, ?, ?, ?, 'pending', ?)
     """, (
+        group_chat_id,
         user_1_id,
         user_2_id,
         deal_amount,
@@ -436,5 +441,30 @@ def search_user(chat_id):
     connection.close()
 
     return user
+    
+    
+# ==========================================
+# GET ACTIVE DEAL FOR GROUP
+# ==========================================
+
+def get_active_deal(group_chat_id):
+
+    connection = get_connection()
+    cursor = connection.cursor()
+
+    cursor.execute("""
+        SELECT *
+        FROM deals
+        WHERE group_chat_id = ?
+        AND status = 'pending'
+        ORDER BY deal_id DESC
+        LIMIT 1
+    """, (group_chat_id,))
+
+    deal = cursor.fetchone()
+
+    connection.close()
+
+    return deal    
 
 
