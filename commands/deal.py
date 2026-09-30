@@ -3,9 +3,9 @@ from config import MM_CHAT_IDS, ADMIN_IDS
 from database.database import (
     save_user,
     create_deal,
-    get_active_deal
+    get_active_deal,
+    remove_deal
 )
-
 
 # ==========================================
 # TEMPORARY DEAL SETUP
