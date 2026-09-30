@@ -12,7 +12,7 @@ from commands.search_user import register_user_search
 from commands.deal import register_deal
 from commands.removedeal import register_removedeal
 from commands.payment import register_payment
-
+from commands.mm_fee import register_mm_fee
 
 init_database()
 
@@ -28,7 +28,7 @@ register_user_search(bot)
 register_deal(bot)
 register_removedeal(bot)
 register_payment(bot)
-
+register_mm_fee(bot)
 
 print("🤖 Raunak MM Bot is starting...")
 
