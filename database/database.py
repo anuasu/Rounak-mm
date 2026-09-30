@@ -38,45 +38,48 @@ def init_database():
         )
     """)
 
-# ======================================
-# DEALS
-# ======================================
+    # ======================================
+    # DEALS
+    # ======================================
 
     cursor.execute("""
         CREATE TABLE IF NOT EXISTS deals (
-        deal_id INTEGER PRIMARY KEY AUTOINCREMENT,
+            deal_id INTEGER PRIMARY KEY AUTOINCREMENT,
 
-        group_chat_id INTEGER,
+            group_chat_id INTEGER,
 
-        user_1_id INTEGER,
-        user_2_id INTEGER,
+            user_1_id INTEGER,
+            user_2_id INTEGER,
 
-        deal_amount REAL DEFAULT 0,
-        mm_fee REAL DEFAULT 0,
-        total_received REAL DEFAULT 0,
-        holding_amount REAL DEFAULT 0,
+            deal_amount REAL DEFAULT 0,
+            mm_fee REAL DEFAULT 0,
+            total_received REAL DEFAULT 0,
+            holding_amount REAL DEFAULT 0,
 
-        status TEXT DEFAULT 'pending',
+            status TEXT DEFAULT 'pending',
 
-        created_at TEXT,
-        completed_at TEXT
-    )
-""")
+            created_at TEXT,
+            completed_at TEXT
+        )
+    """)
+
+    # ======================================
+    # MM FEE SETTINGS
+    # ======================================
+
+    cursor.execute("""
+        CREATE TABLE IF NOT EXISTS mm_fee_settings (
+            id INTEGER PRIMARY KEY CHECK (id = 1),
+            image_file_id TEXT
+        )
+    """)
+
+    # ======================================
+    # SAVE + CLOSE
+    # ======================================
 
     connection.commit()
     connection.close()
-
-
-# ======================================
-# MM FEE SETTINGS
-# ======================================
-
-    cursor.execute("""
-    CREATE TABLE IF NOT EXISTS mm_fee_settings (
-        id INTEGER PRIMARY KEY CHECK (id = 1),
-        image_file_id TEXT
-    )
-""")
 
 
 # ==========================================
