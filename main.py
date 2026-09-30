@@ -11,6 +11,7 @@ from commands.leaderboard import register_leaderboard
 from commands.search_user import register_user_search
 from commands.deal import register_deal
 from commands.removedeal import register_removedeal
+from commands.payment import register_payment
 
 
 init_database()
@@ -26,8 +27,9 @@ register_leaderboard(bot)
 register_user_search(bot)
 register_deal(bot)
 register_removedeal(bot)
+register_payment(bot)
 
 
-print("🤖 ROUNAK MM Bot is starting...")
+print("🤖 Raunak MM Bot is starting...")
 
 bot.infinity_polling(skip_pending=True)
