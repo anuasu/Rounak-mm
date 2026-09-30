@@ -1,4 +1,4 @@
-from config import MM_CHAT_ID, ADMIN_IDS
+from config import MM_CHAT_IDS, ADMIN_IDS
 
 from database.database import (
     save_user,
@@ -72,7 +72,7 @@ def register_deal(bot):
         # MM / ADMIN PERMISSION
         # ==================================
 
-        if message.from_user.id != MM_CHAT_ID:
+        if message.from_user.id not in MM_CHAT_IDS:
 
             if message.from_user.id in ADMIN_IDS:
                 bot.reply_to(
