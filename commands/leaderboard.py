@@ -1,3 +1,5 @@
+
+from telebot import types
 from database.database import (
     get_leaderboard,
     get_total_user_deals
@@ -48,6 +50,33 @@ def build_leaderboard():
 
     return text
 
+
+def register_leaderboard(bot):
+
+    @bot.callback_query_handler(
+        func=lambda call: call.data == "leaderboard"
+    )
+    def leaderboard_callback(call):
+
+        bot.answer_callback_query(call.id)
+
+        text = build_leaderboard()
+
+        keyboard = types.InlineKeyboardMarkup()
+
+        keyboard.add(
+            types.InlineKeyboardButton(
+                "🔎 Search User ID",
+                callback_data="search_user"
+            )
+        )
+
+        bot.send_message(
+            call.message.chat.id,
+            text,
+            reply_markup=keyboard,
+            parse_mode="HTML"
+        )
 
 # ==========================================
 # REGISTER LEADERBOARD
