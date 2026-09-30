@@ -3,8 +3,7 @@ from config import MM_CHAT_IDS, ADMIN_IDS
 from database.database import (
     save_user,
     create_deal,
-    get_active_deal,
-    remove_deal
+    get_active_deal
 )
 
 # ==========================================
@@ -264,93 +263,3 @@ def register_deal(bot):
             parse_mode="HTML"
         )
 
-
-    # ======================================
-    # .removedeal
-    # ======================================
-
-    @bot.message_handler(
-        func=lambda message:
-        message.text
-        and message.text.strip().lower() == ".removedeal"
-    )
-    def remove_deal_command(message):
-
-        # ----------------------------------
-        # MM ONLY
-        # ----------------------------------
-
-        if message.from_user.id not in MM_CHAT_IDS:
-
-            if message.from_user.id in ADMIN_IDS:
-                bot.reply_to(
-                    message,
-                    "⚠️ Sirf MM ye command use kar sakta hai."
-                )
-
-            return
-
-        # ----------------------------------
-        # GROUP ONLY
-        # ----------------------------------
-
-        if message.chat.type not in [
-            "group",
-            "supergroup"
-        ]:
-            return
-
-        group_id = message.chat.id
-
-        # ----------------------------------
-        # REMOVE PENDING SETUP
-        # ----------------------------------
-
-        if group_id in pending_deal_users:
-
-            pending_deal_users.pop(
-                group_id,
-                None
-            )
-
-            bot.reply_to(
-                message,
-                (
-                    "🗑️ <b>DEAL SETUP REMOVED</b>\n\n"
-                    "Pending User 1/User 2 setup clear ho gaya.\n\n"
-                    "Ab fresh <code>.deal</code> se start kar sakte ho."
-                ),
-                parse_mode="HTML"
-            )
-
-            return
-
-        # ----------------------------------
-        # ACTIVE DATABASE DEAL
-        # ----------------------------------
-
-        active_deal = get_active_deal(group_id)
-
-        if active_deal:
-
-            bot.reply_to(
-                message,
-                (
-                    f"⚠️ <b>Deal #{active_deal['deal_id']}</b> "
-                    "already database mein active hai.\n\n"
-                    "Iske liye abhi database-level removal "
-                    "function alag se add karna hoga."
-                ),
-                parse_mode="HTML"
-            )
-
-            return
-
-        # ----------------------------------
-        # NOTHING TO REMOVE
-        # ----------------------------------
-
-        bot.reply_to(
-            message,
-            "ℹ️ Koi active/pending deal nahi hai."
-        )
