@@ -1,6 +1,5 @@
 import sqlite3
 from datetime import datetime
-
 from config import DATABASE_FILE
 
 
@@ -23,9 +22,9 @@ def init_database():
     connection = get_connection()
     cursor = connection.cursor()
 
-    # --------------------------------------
-    # USERS TABLE
-    # --------------------------------------
+    # ======================================
+    # USERS
+    # ======================================
 
     cursor.execute("""
         CREATE TABLE IF NOT EXISTS users (
@@ -39,15 +38,16 @@ def init_database():
         )
     """)
 
-    # --------------------------------------
-    # DEALS TABLE
-    # --------------------------------------
+    # ======================================
+    # DEALS
+    # ======================================
 
     cursor.execute("""
         CREATE TABLE IF NOT EXISTS deals (
             deal_id INTEGER PRIMARY KEY AUTOINCREMENT,
 
-            user_chat_id INTEGER,
+            user_1_id INTEGER,
+            user_2_id INTEGER,
 
             deal_amount REAL DEFAULT 0,
             mm_fee REAL DEFAULT 0,
@@ -66,7 +66,7 @@ def init_database():
 
 
 # ==========================================
-# USER SYSTEM
+# SAVE / UPDATE USER
 # ==========================================
 
 def save_user(chat_id, first_name="", username=""):
@@ -105,6 +105,10 @@ def save_user(chat_id, first_name="", username=""):
     connection.close()
 
 
+# ==========================================
+# GET USER
+# ==========================================
+
 def get_user(chat_id):
 
     connection = get_connection()
@@ -124,11 +128,12 @@ def get_user(chat_id):
 
 
 # ==========================================
-# DEAL SYSTEM
+# CREATE DEAL
 # ==========================================
 
 def create_deal(
-    user_chat_id,
+    user_1_id,
+    user_2_id,
     deal_amount=0,
     mm_fee=0,
     total_received=0,
@@ -142,7 +147,8 @@ def create_deal(
 
     cursor.execute("""
         INSERT INTO deals (
-            user_chat_id,
+            user_1_id,
+            user_2_id,
             deal_amount,
             mm_fee,
             total_received,
@@ -150,9 +156,10 @@ def create_deal(
             status,
             created_at
         )
-        VALUES (?, ?, ?, ?, ?, 'pending', ?)
+        VALUES (?, ?, ?, ?, ?, ?, 'pending', ?)
     """, (
-        user_chat_id,
+        user_1_id,
+        user_2_id,
         deal_amount,
         mm_fee,
         total_received,
@@ -168,6 +175,10 @@ def create_deal(
     return deal_id
 
 
+# ==========================================
+# COMPLETE DEAL
+# ==========================================
+
 def complete_deal(deal_id):
 
     connection = get_connection()
@@ -176,7 +187,27 @@ def complete_deal(deal_id):
     now = datetime.now().isoformat()
 
     # --------------------------------------
-    # Deal complete karo
+    # Deal information
+    # --------------------------------------
+
+    cursor.execute("""
+        SELECT *
+        FROM deals
+        WHERE deal_id = ?
+    """, (deal_id,))
+
+    deal = cursor.fetchone()
+
+    if not deal:
+        connection.close()
+        return False
+
+    if deal["status"] == "completed":
+        connection.close()
+        return False
+
+    # --------------------------------------
+    # Mark completed
     # --------------------------------------
 
     cursor.execute("""
@@ -191,40 +222,43 @@ def complete_deal(deal_id):
     ))
 
     # --------------------------------------
-    # Deal ki information nikalo
+    # User 1 update
     # --------------------------------------
 
     cursor.execute("""
-        SELECT
-            user_chat_id,
-            deal_amount
-        FROM deals
-        WHERE deal_id = ?
-    """, (deal_id,))
+        UPDATE users
+        SET
+            completed_deals = completed_deals + 1,
+            total_deal_amount = total_deal_amount + ?,
+            updated_at = ?
+        WHERE chat_id = ?
+    """, (
+        deal["deal_amount"],
+        now,
+        deal["user_1_id"]
+    ))
 
-    deal = cursor.fetchone()
+    # --------------------------------------
+    # User 2 update
+    # --------------------------------------
 
-    if deal:
-
-        # ----------------------------------
-        # User leaderboard update
-        # ----------------------------------
-
-        cursor.execute("""
-            UPDATE users
-            SET
-                completed_deals = completed_deals + 1,
-                total_deal_amount = total_deal_amount + ?,
-                updated_at = ?
-            WHERE chat_id = ?
-        """, (
-            deal["deal_amount"],
-            now,
-            deal["user_chat_id"]
-        ))
+    cursor.execute("""
+        UPDATE users
+        SET
+            completed_deals = completed_deals + 1,
+            total_deal_amount = total_deal_amount + ?,
+            updated_at = ?
+        WHERE chat_id = ?
+    """, (
+        deal["deal_amount"],
+        now,
+        deal["user_2_id"]
+    ))
 
     connection.commit()
     connection.close()
+
+    return True
 
 
 # ==========================================
@@ -263,10 +297,10 @@ def get_leaderboard(limit=20):
 
 
 # ==========================================
-# TOTAL COMPLETED DEALS
+# TOTAL USER DEALS
 # ==========================================
 
-def get_total_completed_deals():
+def get_total_user_deals():
 
     connection = get_connection()
     cursor = connection.cursor()
@@ -285,7 +319,7 @@ def get_total_completed_deals():
 
 
 # ==========================================
-# USER DEAL HISTORY
+# GET USER DEAL HISTORY
 # ==========================================
 
 def get_user_deals(chat_id):
@@ -296,9 +330,13 @@ def get_user_deals(chat_id):
     cursor.execute("""
         SELECT *
         FROM deals
-        WHERE user_chat_id = ?
+        WHERE user_1_id = ?
+           OR user_2_id = ?
         ORDER BY deal_id DESC
-    """, (chat_id,))
+    """, (
+        chat_id,
+        chat_id
+    ))
 
     deals = cursor.fetchall()
 
@@ -308,7 +346,7 @@ def get_user_deals(chat_id):
 
 
 # ==========================================
-# UPDATE HOLDING AMOUNT
+# UPDATE HOLDING
 # ==========================================
 
 def update_holding(deal_id, holding_amount):
