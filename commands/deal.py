@@ -8,10 +8,10 @@ from database.database import (
 
 
 # ==========================================
-# EXTRACT USERS FROM MESSAGE
+# GET 2 USERS FROM TELEGRAM MENTIONS
 # ==========================================
 
-def extract_users_from_message(message, bot):
+def get_mentioned_users(message):
 
     users = []
 
@@ -20,10 +20,7 @@ def extract_users_from_message(message, bot):
 
     for entity in message.entities:
 
-        # ----------------------------------
-        # TELEGRAM TEXT MENTION
-        # ----------------------------------
-
+        # Telegram's real user mention
         if entity.type == "text_mention":
 
             user = entity.user
@@ -31,37 +28,7 @@ def extract_users_from_message(message, bot):
             if user and not user.is_bot:
                 users.append(user)
 
-        # ----------------------------------
-        # @USERNAME MENTION
-        # ----------------------------------
-
-        elif entity.type == "mention":
-
-            try:
-
-                username = message.text[
-                    entity.offset + 1:
-                    entity.offset + entity.length
-                ]
-
-                chat = bot.get_chat(
-                    "@" + username
-                )
-
-                if chat.type == "private":
-
-                    users.append(chat)
-
-            except Exception as error:
-
-                print(
-                    f"Username lookup error: {error}"
-                )
-
-    # --------------------------------------
-    # REMOVE DUPLICATE USERS
-    # --------------------------------------
-
+    # Remove duplicate users
     unique_users = []
     seen_ids = set()
 
@@ -76,7 +43,7 @@ def extract_users_from_message(message, bot):
 
 
 # ==========================================
-# REGISTER DEAL
+# REGISTER DEAL COMMAND
 # ==========================================
 
 def register_deal(bot):
@@ -89,7 +56,7 @@ def register_deal(bot):
     def deal_command(message):
 
         # ==================================
-        # MM / ADMIN PERMISSION
+        # MM ONLY
         # ==================================
 
         if message.from_user.id not in MM_CHAT_IDS:
@@ -143,40 +110,38 @@ def register_deal(bot):
             return
 
         # ==================================
-        # EXTRACT TWO USERS
+        # GET MENTIONED USERS
         # ==================================
 
-        users = extract_users_from_message(
-            message,
-            bot
-        )
+        users = get_mentioned_users(message)
 
         # ==================================
-        # CHECK USERS
+        # EXACTLY 2 USERS
         # ==================================
 
-        if len(users) < 2:
+        if len(users) != 2:
 
             bot.reply_to(
                 message,
                 (
-                    "⚠️ <b>2 users mention karo.</b>\n\n"
+                    "⚠️ <b>2 users ko Telegram mention "
+                    "ke through select karo.</b>\n\n"
 
                     "Example:\n"
-                    "<code>.deal @username1 @username2</code>\n\n"
+                    "<code>.deal @User1 @User2</code>\n\n"
 
-                    "Agar username nahi hai, "
-                    "Telegram ka mention/select option "
-                    "use karo."
+                    "Username ko sirf text ki tarah type "
+                    "mat karo. Telegram ka user mention "
+                    "select karo."
                 ),
                 parse_mode="HTML"
             )
 
             return
 
-        # ----------------------------------
-        # ONLY FIRST TWO USERS
-        # ----------------------------------
+        # ==================================
+        # USER DATA
+        # ==================================
 
         user_1 = users[0]
         user_2 = users[1]
@@ -202,7 +167,7 @@ def register_deal(bot):
         )
 
         # ==================================
-        # CREATE DEAL
+        # CREATE ACTIVE DEAL
         # ==================================
 
         deal_id = create_deal(
@@ -212,7 +177,7 @@ def register_deal(bot):
         )
 
         # ==================================
-        # USER 1 DETAILS
+        # USER 1 DISPLAY
         # ==================================
 
         user_1_name = (
@@ -220,20 +185,14 @@ def register_deal(bot):
             or "Unknown"
         )
 
-        if user_1.username:
-
-            user_1_username = (
-                f"@{user_1.username}"
-            )
-
-        else:
-
-            user_1_username = (
-                "No Username"
-            )
+        user_1_username = (
+            f"@{user_1.username}"
+            if user_1.username
+            else "No Username"
+        )
 
         # ==================================
-        # USER 2 DETAILS
+        # USER 2 DISPLAY
         # ==================================
 
         user_2_name = (
@@ -241,53 +200,34 @@ def register_deal(bot):
             or "Unknown"
         )
 
-        if user_2.username:
-
-            user_2_username = (
-                f"@{user_2.username}"
-            )
-
-        else:
-
-            user_2_username = (
-                "No Username"
-            )
+        user_2_username = (
+            f"@{user_2.username}"
+            if user_2.username
+            else "No Username"
+        )
 
         # ==================================
-        # DEAL MESSAGE
+        # DEAL CREATED MESSAGE
         # ==================================
 
         text = (
-
             "🤝 <b>DEAL ADDED</b>\n\n"
 
-            f"👤 <b>User 1:</b> "
-            f"{user_1_name}\n"
-
+            f"👤 <b>User 1:</b> {user_1_name}\n"
             f"🔗 {user_1_username}\n"
-
             f"🆔 <code>{user_1.id}</code>\n\n"
 
-            f"👤 <b>User 2:</b> "
-            f"{user_2_name}\n"
-
+            f"👤 <b>User 2:</b> {user_2_name}\n"
             f"🔗 {user_2_username}\n"
-
             f"🆔 <code>{user_2.id}</code>\n\n"
 
             "━━━━━━━━━━━━━━━━━━\n\n"
 
             f"🤝 <b>Deal ID:</b> #{deal_id}\n"
-
             f"💬 <b>Group ID:</b> "
             f"<code>{message.chat.id}</code>\n"
-
             "⏳ <b>Status:</b> Active"
         )
-
-        # ==================================
-        # SEND DEAL MESSAGE
-        # ==================================
 
         bot.send_message(
             message.chat.id,
