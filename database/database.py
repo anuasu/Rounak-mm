@@ -387,3 +387,54 @@ def update_payment(deal_id, total_received):
 
     connection.commit()
     connection.close()
+
+# ==========================================
+# RAUNAK MM TOTAL STATS
+# ==========================================
+
+def get_mm_stats():
+
+    connection = get_connection()
+    cursor = connection.cursor()
+
+    cursor.execute("""
+        SELECT
+            COUNT(*) AS total_deals,
+            COALESCE(SUM(deal_amount), 0) AS total_amount
+        FROM deals
+        WHERE status = 'completed'
+    """)
+
+    stats = cursor.fetchone()
+
+    connection.close()
+
+    return stats
+
+# ==========================================
+# SEARCH USER
+# ==========================================
+
+def search_user(chat_id):
+
+    connection = get_connection()
+    cursor = connection.cursor()
+
+    cursor.execute("""
+        SELECT
+            chat_id,
+            first_name,
+            username,
+            completed_deals,
+            total_deal_amount
+        FROM users
+        WHERE chat_id = ?
+    """, (chat_id,))
+
+    user = cursor.fetchone()
+
+    connection.close()
+
+    return user
+
+
