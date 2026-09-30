@@ -67,6 +67,18 @@ def init_database():
     connection.close()
 
 
+# ======================================
+# MM FEE SETTINGS
+# ======================================
+
+    cursor.execute("""
+    CREATE TABLE IF NOT EXISTS mm_fee_settings (
+        id INTEGER PRIMARY KEY CHECK (id = 1),
+        image_file_id TEXT
+    )
+""")
+
+
 # ==========================================
 # SAVE / UPDATE USER
 # ==========================================
@@ -507,3 +519,53 @@ def remove_deal(group_chat_id):
 
     return deal_id
 
+# ==========================================
+# GET MM FEE IMAGE
+# ==========================================
+
+def get_mm_fee_image():
+
+    connection = get_connection()
+    cursor = connection.cursor()
+
+    cursor.execute("""
+        SELECT image_file_id
+        FROM mm_fee_settings
+        WHERE id = 1
+    """)
+
+    result = cursor.fetchone()
+
+    connection.close()
+
+    if result:
+        return result["image_file_id"]
+
+    return None
+
+
+# ==========================================
+# SET MM FEE IMAGE
+# ==========================================
+
+def set_mm_fee_image(image_file_id):
+
+    connection = get_connection()
+    cursor = connection.cursor()
+
+    cursor.execute("""
+        INSERT INTO mm_fee_settings (
+            id,
+            image_file_id
+        )
+        VALUES (1, ?)
+
+        ON CONFLICT(id)
+        DO UPDATE SET
+            image_file_id = excluded.image_file_id
+    """, (
+        image_file_id,
+    ))
+
+    connection.commit()
+    connection.close()
