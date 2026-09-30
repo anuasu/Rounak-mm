@@ -11,7 +11,7 @@ from database.database import (
 # GET 2 USERS FROM TELEGRAM MENTIONS
 # ==========================================
 
-def get_mentioned_users(message):
+def get_mentioned_users(message, bot):
 
     users = []
 
@@ -20,7 +20,10 @@ def get_mentioned_users(message):
 
     for entity in message.entities:
 
-        # Telegram's real user mention
+        # ==================================
+        # TELEGRAM USER SELECT MENTION
+        # ==================================
+
         if entity.type == "text_mention":
 
             user = entity.user
@@ -28,7 +31,36 @@ def get_mentioned_users(message):
             if user and not user.is_bot:
                 users.append(user)
 
-    # Remove duplicate users
+        # ==================================
+        # @USERNAME
+        # ==================================
+
+        elif entity.type == "mention":
+
+            username = message.text[
+                entity.offset + 1:
+                entity.offset + entity.length
+            ]
+
+            try:
+
+                chat = bot.get_chat(
+                    "@" + username
+                )
+
+                if chat.type == "private":
+                    users.append(chat)
+
+            except Exception as error:
+
+                print(
+                    f"Username error @{username}: {error}"
+                )
+
+    # ==================================
+    # REMOVE DUPLICATES
+    # ==================================
+
     unique_users = []
     seen_ids = set()
 
@@ -40,7 +72,6 @@ def get_mentioned_users(message):
             unique_users.append(user)
 
     return unique_users
-
 
 # ==========================================
 # REGISTER DEAL COMMAND
@@ -113,7 +144,7 @@ def register_deal(bot):
         # GET MENTIONED USERS
         # ==================================
 
-        users = get_mentioned_users(message)
+        users = get_mentioned_users(message, bot)
 
         # ==================================
         # EXACTLY 2 USERS
