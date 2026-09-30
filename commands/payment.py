@@ -219,14 +219,14 @@ def register_payment(bot):
         # ==================================
 
         voucher_format_message = bot.send_message(
-            message.chat.id,
-            (
-                "🧾 <b>VOUCHER FORMAT</b>\n\n"
-                f"I vouch @RounakMM for MM'D "
-                f"{amount_text}"
-            ),
-            parse_mode="HTML"
-        )
+    message.chat.id,
+    (
+        "🧾 <b>VOUCHER FORMAT</b>\n\n"
+        f"<code>I vouch @RounakMM for MM'D "
+        f"{amount_text}</code>"
+    ),
+    parse_mode="HTML"
+)
 
         # ==================================
         # PIN MESSAGE 2
