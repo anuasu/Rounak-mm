@@ -36,3 +36,9 @@ CHECK_JOIN_BUTTON = "✅ Check Join"
 # ==========================================
 
 DATABASE_FILE = "database/raunak_mm.db"
+
+# ==========================================
+# RAUNAK MM ACCOUNT
+# ==========================================
+
+MM_CHAT_ID = 8731225978
