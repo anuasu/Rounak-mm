@@ -376,17 +376,20 @@ def update_holding(deal_id, holding_amount):
 # UPDATE PAYMENT
 # ==========================================
 
-def update_payment(deal_id, total_received):
+def update_payment(deal_id, amount):
 
     connection = get_connection()
     cursor = connection.cursor()
 
     cursor.execute("""
         UPDATE deals
-        SET total_received = ?
+        SET
+            deal_amount = ?,
+            total_received = ?
         WHERE deal_id = ?
     """, (
-        total_received,
+        amount,
+        amount,
         deal_id
     ))
 
