@@ -41,4 +41,7 @@ DATABASE_FILE = "database/raunak_mm.db"
 # RAUNAK MM ACCOUNT
 # ==========================================
 
-MM_CHAT_ID = 8731225978
+MM_CHAT_IDS = [
+    8731225978,
+    8115436142
+]
