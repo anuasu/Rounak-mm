@@ -2,7 +2,8 @@ from config import MM_CHAT_IDS, ADMIN_IDS
 
 from database.database import (
     get_active_deal,
-    update_payment
+    update_payment,
+    complete_deal
 )
 
 
@@ -146,7 +147,9 @@ def register_payment(bot):
             active_deal["deal_id"],
             amount
         )
-
+        complete_deal(
+            active_deal["deal_id"]
+        )
         # ==================================
         # GET USERS
         # ==================================
