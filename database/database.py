@@ -468,3 +468,39 @@ def get_active_deal(group_chat_id):
     return deal    
 
 
+# ==========================================
+# REMOVE ACTIVE DEAL
+# ==========================================
+
+def remove_deal(group_chat_id):
+
+    connection = get_connection()
+    cursor = connection.cursor()
+
+    cursor.execute("""
+        SELECT deal_id
+        FROM deals
+        WHERE group_chat_id = ?
+        AND status = 'pending'
+        ORDER BY deal_id DESC
+        LIMIT 1
+    """, (group_chat_id,))
+
+    deal = cursor.fetchone()
+
+    if not deal:
+        connection.close()
+        return None
+
+    deal_id = deal["deal_id"]
+
+    cursor.execute("""
+        DELETE FROM deals
+        WHERE deal_id = ?
+    """, (deal_id,))
+
+    connection.commit()
+    connection.close()
+
+    return deal_id
+
