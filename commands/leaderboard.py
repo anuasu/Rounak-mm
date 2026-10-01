@@ -21,9 +21,9 @@ def build_leaderboard():
     mm_total_amount = mm_stats["total_amount"] or 0
 
     text = (
-        "🏆 <b>RAUNAK MM LEADERBOARD</b>\n\n"
+        "🏆 <b>ROUNAK MM LEADERBOARD</b>\n\n"
 
-        "👑 <b>RAUNAK MM</b>\n"
+        "👑 <b>ROUNAK MM</b>\n"
         f"🤝 Total Deals: <b>{mm_total_deals}</b>\n"
         f"💰 Total Deal Amount: <b>₹{mm_total_amount:g}</b>\n\n"
 
@@ -33,7 +33,7 @@ def build_leaderboard():
     )
 
     if not users:
-        text += "📭 Abhi leaderboard mein koi user data nahi hai."
+        text += "🏆 Leaderboard is Empty\nNo user data is available yet."
 
         return text
 
