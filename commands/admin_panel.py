@@ -485,24 +485,28 @@ def register_admin_panel(bot):
 
                 "🤝 <code>.deal</code>\n"
                 "New deal start karne ke liye.\n\n"
+                
+                "🗑️ <code>.removedeal</code>\n"
+                "Pending/active deal remove karne ke liye.\n\n"
+                
+                
+                "📋 <code>.form</code>\n"
+                "Blank deal form ke liye.\n\n"
+                
+                
+                "⏸️ <code>.hold amount</code>\n"
+                "Payment hold karne ke liye.\n\n"
+                
+                
+                "📱 <code>.qr1</code> - <code>.qr10</code>\n"
+                "QR payment ke liye.\n\n"
+                
 
                 "💸 <code>.payment amount</code>\n"
                 "Payment complete karne ke liye.\n\n"
-
-                "⏸️ <code>.hold amount</code>\n"
-                "Payment hold karne ke liye.\n\n"
-
+                
                 "🧾 <code>.voucher amount</code>\n"
-                "Voucher generate karne ke liye.\n\n"
-
-                "📋 <code>.form</code>\n"
-                "Blank deal form ke liye.\n\n"
-
-                "📱 <code>.qr1</code> - <code>.qr10</code>\n"
-                "QR payment ke liye.\n\n"
-
-                "🗑️ <code>.removedeal</code>\n"
-                "Pending/active deal remove karne ke liye.\n\n"
+                "Voucher generate karne ke liye.\n\n"                        
 
                 "🏆 <b>Leaderboard</b>\n"
                 "MM aur users ki deal statistics."
