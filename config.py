@@ -17,21 +17,24 @@ BACKUP_TIMEZONE = "Asia/Kolkata"
 # REQUIRED CHANNELS
 # ==============================
 
-CHANNEL_1 = "@sf_reset"
+CHANNEL_1 = "@sftoolgc"
 CHANNEL_1_LINK = "https://t.me/sf_reset"
 
 CHANNEL_2 = "@rounakvoucher"
 CHANNEL_2_LINK = "https://t.me/rounakvoucher"
 
+CHANNEL_3 = "@eaglevoucher"
+CHANNEL_3_LINK = "https://t.me/eaglevoucher"
 
 # ==============================
 # JOIN BUTTONS
 # ==============================
 
-CHANNEL_1_BUTTON = "📢 Join Channel 1"
-CHANNEL_2_BUTTON = "📢 Join Channel 2"
+CHANNEL_1_BUTTON = "📢 Join SF TOOL GC"
+CHANNEL_2_BUTTON = "📢 Join Rounak VOUCH"
+CHANNEL_2_BUTTON = "📢 Join Main VOUCH"
 
-CHECK_JOIN_BUTTON = "✅ Check Join"
+CHECK_JOIN_BUTTON = "✅ I'M DONE"
 
 # ==========================================
 # DATABASE
