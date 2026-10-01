@@ -11,9 +11,11 @@ from zoneinfo import ZoneInfo
 
 from database.database import (
     get_backup_data,
-    restore_backup_data
+    restore_backup_data,
+    get_connection
 )
 
+broadcast_waiting = set()
 
 # ==========================================
 # ADMIN PANEL KEYBOARD
@@ -327,6 +329,9 @@ def register_admin_panel(bot):
             )
 
 
+    
+
+
     # ======================================
     # BROADCAST
     # ======================================
@@ -352,11 +357,105 @@ def register_admin_panel(bot):
             call.message.chat.id,
             (
                 "📢 <b>BROADCAST</b>\n\n"
-                "Broadcast system yahan add hoga."
+                "Jo message sabhi users ko bhejna hai, "
+                "ab woh message send karo.\n\n"
+                "⚠️ Text, photo, video ya document bhej sakte ho."
             ),
             parse_mode="HTML"
         )
 
+        # Admin ko broadcast mode mein daalna
+        broadcast_waiting.add(call.from_user.id)
+
+
+    # ======================================
+    # RECEIVE BROADCAST MESSAGE
+    # ======================================
+
+    @bot.message_handler(
+        func=lambda message:
+        message.from_user.id in broadcast_waiting,
+        content_types=[
+            "text",
+            "photo",
+            "video",
+            "document",
+            "audio",
+            "voice",
+            "animation"
+        ]
+    )
+    def receive_broadcast(message):
+
+        if message.from_user.id not in ADMIN_IDS:
+            return
+
+        # Broadcast mode remove
+        broadcast_waiting.discard(
+            message.from_user.id
+        )
+
+        connection = get_connection()
+        cursor = connection.cursor()
+
+        cursor.execute("""
+            SELECT chat_id
+            FROM users
+        """)
+
+        users = cursor.fetchall()
+
+        connection.close()
+
+        sent = 0
+        failed = 0
+
+        bot.reply_to(
+            message,
+            "📢 Broadcast start ho gaya...\n\n"
+            "⏳ Please wait."
+        )
+
+        for user in users:
+
+            user_id = user["chat_id"]
+
+            try:
+
+                bot.copy_message(
+                    user_id,
+                    message.chat.id,
+                    message.message_id
+                )
+
+                sent += 1
+
+            except Exception as error:
+
+                failed += 1
+
+                print(
+                    f"Broadcast failed for {user_id}: {error}"
+                )
+
+            # Telegram flood limit se bachne ke liye
+            time.sleep(0.05)
+
+        # ==================================
+        # RESULT
+        # ==================================
+
+        bot.send_message(
+            message.chat.id,
+            (
+                "📢 <b>BROADCAST COMPLETED</b>\n\n"
+                f"👥 Total Users: <b>{len(users)}</b>\n"
+                f"✅ Sent: <b>{sent}</b>\n"
+                f"❌ Failed: <b>{failed}</b>"
+            ),
+            parse_mode="HTML"
+        )
+    
 
     # ======================================
     # HELP
