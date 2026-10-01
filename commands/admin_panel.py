@@ -1,7 +1,10 @@
 from telebot import types
-
-from config import ADMIN_IDS
+from config import ADMIN_IDS, BACKUP_TIMEZONE
 import json
+import os
+import threading
+from datetime import datetime
+from zoneinfo import ZoneInfo
 
 from database.database import (
     get_backup_data,
@@ -71,6 +74,109 @@ def register_admin_panel(bot):
             reply_markup=admin_panel_keyboard(),
             parse_mode="HTML"
         )
+
+
+    # ==========================================
+# AUTOMATIC DAILY BACKUP
+# ==========================================
+
+def automatic_backup(bot):
+
+    while True:
+
+        try:
+
+            now = datetime.now(
+                ZoneInfo(BACKUP_TIMEZONE)
+            )
+
+            # 12:00 AM check
+            if now.hour == 0 and now.minute == 0:
+
+                backup_data = get_backup_data()
+
+                backup_text = json.dumps(
+                    backup_data,
+                    indent=4,
+                    ensure_ascii=False
+                )
+
+                backup_file = "raunak_mm_auto_backup.json"
+
+                with open(
+                    backup_file,
+                    "w",
+                    encoding="utf-8"
+                ) as file:
+
+                    file.write(backup_text)
+
+                # ----------------------------------
+                # SEND TO ALL ADMINS
+                # ----------------------------------
+
+                for admin_id in ADMIN_IDS:
+
+                    try:
+
+                        with open(
+                            backup_file,
+                            "rb"
+                        ) as file:
+
+                            bot.send_document(
+                                admin_id,
+                                file,
+                                caption=(
+                                    "🤖 <b>AUTOMATIC BACKUP</b>\n\n"
+                                    "🕛 Daily 12:00 AM backup\n"
+                                    "✅ Leaderboard data saved."
+                                ),
+                                parse_mode="HTML"
+                            )
+
+                    except Exception as error:
+
+                        print(
+                            f"Automatic backup send error "
+                            f"for {admin_id}: {error}"
+                        )
+
+                # ----------------------------------
+                # DELETE TEMP FILE
+                # ----------------------------------
+
+                try:
+                    os.remove(backup_file)
+                except Exception:
+                    pass
+
+                # Same minute mein dobara na chale
+                while True:
+
+                    current_time = datetime.now(
+                        ZoneInfo(BACKUP_TIMEZONE)
+                    )
+
+                    if current_time.minute != 0:
+                        break
+
+                    import time
+                    time.sleep(5)
+
+            else:
+
+                import time
+                time.sleep(20)
+
+        except Exception as error:
+
+            print(
+                f"Automatic backup error: {error}"
+            )
+
+            import time
+            time.sleep(30)
 
     # ======================================
     # BACKUP / RESTORE
@@ -472,4 +578,22 @@ def backup_keyboard():
 
     return keyboard
     
-    
+
+# ==========================================
+# START AUTOMATIC BACKUP
+# ==========================================
+
+def start_automatic_backup(bot):
+
+    backup_thread = threading.Thread(
+        target=automatic_backup,
+        args=(bot,),
+        daemon=True
+    )
+
+    backup_thread.start()
+
+
+
+
+
