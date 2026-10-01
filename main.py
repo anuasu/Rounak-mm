@@ -16,6 +16,10 @@ from commands.mm_fee import register_mm_fee
 from commands.qr import register_qr
 from commands.hold import register_hold
 from commands.voucher import register_voucher
+from commands.form import register_form
+
+
+
 
 
 init_database()
@@ -36,6 +40,7 @@ register_mm_fee(bot)
 register_qr(bot)
 register_hold(bot)
 register_voucher(bot)
+register_form(bot)
 
 
 print("🤖 Raunak MM Bot is starting...")
