@@ -1,7 +1,9 @@
 from telebot import types
 
 from config import ADMIN_IDS
+import json
 
+from database.database import get_backup_data
 
 # ==========================================
 # ADMIN PANEL KEYBOARD
@@ -101,6 +103,79 @@ def register_admin_panel(bot):
         )
 
     # ======================================
+    # MANUAL BACKUP
+    # ======================================
+
+    @bot.callback_query_handler(
+        func=lambda call:
+        call.data == "manual_backup"
+    )
+    def manual_backup(call):
+
+        if call.from_user.id not in ADMIN_IDS:
+
+            bot.answer_callback_query(
+                call.id,
+                "❌ Access denied.",
+                show_alert=True
+            )
+            return
+
+        bot.answer_callback_query(
+            call.id,
+            "📤 Backup preparing..."
+        )
+
+        try:
+
+            backup_data = get_backup_data()
+
+            backup_text = json.dumps(
+                backup_data,
+                indent=4,
+                ensure_ascii=False
+            )
+
+            backup_file = "raunak_mm_backup.json"
+
+            with open(
+                backup_file,
+                "w",
+                encoding="utf-8"
+            ) as file:
+
+                file.write(backup_text)
+
+            with open(
+                backup_file,
+                "rb"
+            ) as file:
+
+                bot.send_document(
+                    call.message.chat.id,
+                    file,
+                    caption=(
+                        "💾 <b>RAUNAK MM BACKUP</b>\n\n"
+                        "✅ Leaderboard data successfully extracted."
+                    ),
+                    parse_mode="HTML"
+                )
+
+        except Exception as error:
+
+            print(
+                f"Manual backup error: {error}"
+            )
+
+            bot.send_message(
+                call.message.chat.id,
+                "❌ Backup create karte waqt error aa gaya."
+            )
+
+
+
+
+    # ======================================
     # BROADCAST
     # ======================================
 
@@ -184,6 +259,42 @@ def register_admin_panel(bot):
         )
 
 
+
+    
+    # ======================================
+    # BACK TO ADMIN PANEL
+    # ======================================
+
+    @bot.callback_query_handler(
+        func=lambda call:
+        call.data == "admin_panel_back"
+    )
+    def admin_panel_back(call):
+
+        if call.from_user.id not in ADMIN_IDS:
+
+            bot.answer_callback_query(
+                call.id,
+                "❌ Access denied.",
+                show_alert=True
+            )
+            return
+
+        bot.answer_callback_query(call.id)
+
+        bot.edit_message_text(
+            (
+                "🛠️ <b>ROUNAK MM ADMIN PANEL</b>\n\n"
+                "Neeche se option select karo:"
+            ),
+            call.message.chat.id,
+            call.message.message_id,
+            reply_markup=admin_panel_keyboard(),
+            parse_mode="HTML"
+        )
+
+
+
 # ==========================================
 # BACKUP KEYBOARD
 # ==========================================
@@ -216,3 +327,5 @@ def backup_keyboard():
     )
 
     return keyboard
+    
+    
