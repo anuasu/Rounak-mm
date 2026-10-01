@@ -56,7 +56,7 @@ def register_mm_fee(bot):
         bot.send_photo(
             call.message.chat.id,
             image_file_id,
-            caption="💰 <b>RAUNAK MM FEES</b>",
+            caption="💰 <b>ROUNAK MM FEES</b>",
             parse_mode="HTML"
         )
 
