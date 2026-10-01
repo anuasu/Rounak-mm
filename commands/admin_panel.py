@@ -178,6 +178,113 @@ def register_admin_panel(bot):
 
 
 
+        # ======================================
+    # RECEIVE RESTORE FILE
+    # ======================================
+
+    @bot.message_handler(
+        content_types=["document"]
+    )
+    def restore_document(message):
+
+        # ADMIN ONLY
+        if message.from_user.id not in ADMIN_IDS:
+            return
+
+        # FILE CHECK
+        if not message.document.file_name:
+            return
+
+        if not message.document.file_name.lower().endswith(".json"):
+            bot.reply_to(
+                message,
+                "❌ Sirf .json backup file send karo."
+            )
+            return
+
+        try:
+
+            # GET TELEGRAM FILE
+            file_info = bot.get_file(
+                message.document.file_id
+            )
+
+            downloaded_file = bot.download_file(
+                file_info.file_path
+            )
+
+            # READ JSON
+            backup_data = json.loads(
+                downloaded_file.decode("utf-8")
+            )
+
+            # ==================================
+            # VALIDATE BACKUP
+            # ==================================
+
+            if (
+                "raunak_mm" not in backup_data
+                or "users" not in backup_data
+            ):
+                bot.reply_to(
+                    message,
+                    "❌ Invalid Raunak MM backup file."
+                )
+                return
+
+            # ==================================
+            # RESTORE
+            # ==================================
+
+            success = restore_backup_data(
+                backup_data
+            )
+
+            if success:
+
+                raunak = backup_data["raunak_mm"]
+
+                bot.reply_to(
+                    message,
+                    (
+                        "✅ <b>DATA RESTORED</b>\n\n"
+                        f"👑 Deals: "
+                        f"<b>{raunak.get('total_deals', 0)}</b>\n"
+                        f"💰 Amount: "
+                        f"<b>₹{raunak.get('total_amount', 0):g}</b>\n"
+                        f"👥 Users: "
+                        f"<b>{len(backup_data.get('users', []))}</b>\n\n"
+                        "🏆 Leaderboard data successfully restored."
+                    ),
+                    parse_mode="HTML"
+                )
+
+            else:
+
+                bot.reply_to(
+                    message,
+                    "❌ Data restore failed."
+                )
+
+        except json.JSONDecodeError:
+
+            bot.reply_to(
+                message,
+                "❌ Backup file valid JSON nahi hai."
+            )
+
+        except Exception as error:
+
+            print(
+                f"Restore document error: {error}"
+            )
+
+            bot.reply_to(
+                message,
+                "❌ Restore karte waqt error aa gaya."
+            )
+
+
     # ======================================
     # BROADCAST
     # ======================================
