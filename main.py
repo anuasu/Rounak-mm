@@ -17,7 +17,7 @@ from commands.qr import register_qr
 from commands.hold import register_hold
 from commands.voucher import register_voucher
 from commands.form import register_form
-
+from commands.admin_panel import register_admin_panel
 
 
 
@@ -41,7 +41,7 @@ register_qr(bot)
 register_hold(bot)
 register_voucher(bot)
 register_form(bot)
-
+register_admin_panel(bot)
 
 print("🤖 Raunak MM Bot is starting...")
 
