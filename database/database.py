@@ -629,11 +629,8 @@ def get_qr(qr_number):
     return None
 
 
-import json
-
-
 # ==========================================
-# GET LEADERBOARD BACKUP DATA
+# GET BACKUP DATA
 # ==========================================
 
 def get_backup_data():
@@ -641,55 +638,63 @@ def get_backup_data():
     connection = get_connection()
     cursor = connection.cursor()
 
-    # Rounak MM stats
+    # --------------------------------------
+    # RAUNAK MM TOTAL STATS
+    # --------------------------------------
+
     cursor.execute("""
-        SELECT COUNT(*), COALESCE(SUM(amount), 0)
+        SELECT
+            COUNT(*) AS total_deals,
+            COALESCE(SUM(deal_amount), 0) AS total_amount
         FROM deals
         WHERE status = 'completed'
     """)
 
-    result = cursor.fetchone()
+    mm_stats = cursor.fetchone()
 
-    total_deals = result[0] or 0
-    total_amount = result[1] or 0
+    # --------------------------------------
+    # USER LEADERBOARD DATA
+    # --------------------------------------
 
-    # User leaderboard
     cursor.execute("""
         SELECT
-            u.chat_id,
-            u.first_name,
-            u.username,
-            COUNT(d.deal_id) AS deals,
-            COALESCE(SUM(d.amount), 0) AS amount
-        FROM users u
-        LEFT JOIN deals d
-            ON (
-                d.user_1_id = u.chat_id
-                OR d.user_2_id = u.chat_id
-            )
-            AND d.status = 'completed'
-        GROUP BY u.chat_id
-        ORDER BY amount DESC
+            chat_id,
+            first_name,
+            username,
+            completed_deals,
+            total_deal_amount
+        FROM users
+        WHERE completed_deals > 0
+        ORDER BY
+            completed_deals DESC,
+            total_deal_amount DESC
     """)
 
-    users = []
+    users = cursor.fetchall()
 
-    for row in cursor.fetchall():
+    user_data = []
 
-        users.append({
-            "user_id": row[0],
-            "first_name": row[1],
-            "username": row[2],
-            "deals": row[3] or 0,
-            "amount": row[4] or 0
+    for user in users:
+
+        user_data.append({
+            "user_id": user["chat_id"],
+            "first_name": user["first_name"] or "",
+            "username": user["username"] or "",
+            "deals": user["completed_deals"] or 0,
+            "amount": user["total_deal_amount"] or 0
         })
 
     connection.close()
 
+    # --------------------------------------
+    # FINAL BACKUP DATA
+    # --------------------------------------
+
     return {
-        "total_deals": total_deals,
-        "total_amount": total_amount,
-        "users": users
+        "raunak_mm": {
+            "total_deals": mm_stats["total_deals"] or 0,
+            "total_amount": mm_stats["total_amount"] or 0
+        },
+
+        "users": user_data
     }
-    
-    
