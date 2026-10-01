@@ -627,6 +627,69 @@ def get_qr(qr_number):
         return result["image_file_id"]
 
     return None
-    
+
+
+import json
+
+
+# ==========================================
+# GET LEADERBOARD BACKUP DATA
+# ==========================================
+
+def get_backup_data():
+
+    connection = get_connection()
+    cursor = connection.cursor()
+
+    # Rounak MM stats
+    cursor.execute("""
+        SELECT COUNT(*), COALESCE(SUM(amount), 0)
+        FROM deals
+        WHERE status = 'completed'
+    """)
+
+    result = cursor.fetchone()
+
+    total_deals = result[0] or 0
+    total_amount = result[1] or 0
+
+    # User leaderboard
+    cursor.execute("""
+        SELECT
+            u.chat_id,
+            u.first_name,
+            u.username,
+            COUNT(d.deal_id) AS deals,
+            COALESCE(SUM(d.amount), 0) AS amount
+        FROM users u
+        LEFT JOIN deals d
+            ON (
+                d.user_1_id = u.chat_id
+                OR d.user_2_id = u.chat_id
+            )
+            AND d.status = 'completed'
+        GROUP BY u.chat_id
+        ORDER BY amount DESC
+    """)
+
+    users = []
+
+    for row in cursor.fetchall():
+
+        users.append({
+            "user_id": row[0],
+            "first_name": row[1],
+            "username": row[2],
+            "deals": row[3] or 0,
+            "amount": row[4] or 0
+        })
+
+    connection.close()
+
+    return {
+        "total_deals": total_deals,
+        "total_amount": total_amount,
+        "users": users
+    }
     
     
