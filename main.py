@@ -17,8 +17,10 @@ from commands.qr import register_qr
 from commands.hold import register_hold
 from commands.voucher import register_voucher
 from commands.form import register_form
-from commands.admin_panel import register_admin_panel
-from admin_panel import register_admin_panel, start_automatic_backup
+from commands.admin_panel import (
+    register_admin_panel,
+    start_automatic_backup
+)
 
 
 
