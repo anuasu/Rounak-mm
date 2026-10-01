@@ -1,8 +1,11 @@
 from telebot import types
 from config import ADMIN_IDS, BACKUP_TIMEZONE
+
 import json
 import os
 import threading
+import time
+
 from datetime import datetime
 from zoneinfo import ZoneInfo
 
@@ -10,6 +13,7 @@ from database.database import (
     get_backup_data,
     restore_backup_data
 )
+
 
 # ==========================================
 # ADMIN PANEL KEYBOARD
@@ -46,6 +50,40 @@ def admin_panel_keyboard():
 
 
 # ==========================================
+# BACKUP KEYBOARD
+# ==========================================
+
+def backup_keyboard():
+
+    keyboard = types.InlineKeyboardMarkup(
+        row_width=1
+    )
+
+    keyboard.add(
+        types.InlineKeyboardButton(
+            "📤 Manual Backup",
+            callback_data="manual_backup"
+        )
+    )
+
+    keyboard.add(
+        types.InlineKeyboardButton(
+            "📥 Restore Data",
+            callback_data="restore_data"
+        )
+    )
+
+    keyboard.add(
+        types.InlineKeyboardButton(
+            "⬅️ Back",
+            callback_data="admin_panel_back"
+        )
+    )
+
+    return keyboard
+
+
+# ==========================================
 # REGISTER ADMIN PANEL
 # ==========================================
 
@@ -57,10 +95,6 @@ def register_admin_panel(bot):
 
     @bot.message_handler(commands=["admin"])
     def admin_command(message):
-
-        # ----------------------------------
-        # ADMIN ONLY
-        # ----------------------------------
 
         if message.from_user.id not in ADMIN_IDS:
             return
@@ -75,108 +109,6 @@ def register_admin_panel(bot):
             parse_mode="HTML"
         )
 
-
-    # ==========================================
-# AUTOMATIC DAILY BACKUP
-# ==========================================
-
-def automatic_backup(bot):
-
-    while True:
-
-        try:
-
-            now = datetime.now(
-                ZoneInfo(BACKUP_TIMEZONE)
-            )
-
-            # 12:00 AM check
-            if now.hour == 0 and now.minute == 0:
-
-                backup_data = get_backup_data()
-
-                backup_text = json.dumps(
-                    backup_data,
-                    indent=4,
-                    ensure_ascii=False
-                )
-
-                backup_file = "raunak_mm_auto_backup.json"
-
-                with open(
-                    backup_file,
-                    "w",
-                    encoding="utf-8"
-                ) as file:
-
-                    file.write(backup_text)
-
-                # ----------------------------------
-                # SEND TO ALL ADMINS
-                # ----------------------------------
-
-                for admin_id in ADMIN_IDS:
-
-                    try:
-
-                        with open(
-                            backup_file,
-                            "rb"
-                        ) as file:
-
-                            bot.send_document(
-                                admin_id,
-                                file,
-                                caption=(
-                                    "🤖 <b>AUTOMATIC BACKUP</b>\n\n"
-                                    "🕛 Daily 12:00 AM backup\n"
-                                    "✅ Leaderboard data saved."
-                                ),
-                                parse_mode="HTML"
-                            )
-
-                    except Exception as error:
-
-                        print(
-                            f"Automatic backup send error "
-                            f"for {admin_id}: {error}"
-                        )
-
-                # ----------------------------------
-                # DELETE TEMP FILE
-                # ----------------------------------
-
-                try:
-                    os.remove(backup_file)
-                except Exception:
-                    pass
-
-                # Same minute mein dobara na chale
-                while True:
-
-                    current_time = datetime.now(
-                        ZoneInfo(BACKUP_TIMEZONE)
-                    )
-
-                    if current_time.minute != 0:
-                        break
-
-                    import time
-                    time.sleep(5)
-
-            else:
-
-                import time
-                time.sleep(20)
-
-        except Exception as error:
-
-            print(
-                f"Automatic backup error: {error}"
-            )
-
-            import time
-            time.sleep(30)
 
     # ======================================
     # BACKUP / RESTORE
@@ -210,6 +142,7 @@ def automatic_backup(bot):
             reply_markup=backup_keyboard(),
             parse_mode="HTML"
         )
+
 
     # ======================================
     # MANUAL BACKUP
@@ -282,9 +215,41 @@ def automatic_backup(bot):
             )
 
 
+    # ======================================
+    # RESTORE DATA BUTTON
+    # ======================================
+
+    @bot.callback_query_handler(
+        func=lambda call:
+        call.data == "restore_data"
+    )
+    def restore_data_button(call):
+
+        if call.from_user.id not in ADMIN_IDS:
+
+            bot.answer_callback_query(
+                call.id,
+                "❌ Access denied.",
+                show_alert=True
+            )
+            return
+
+        bot.answer_callback_query(call.id)
+
+        bot.send_message(
+            call.message.chat.id,
+            (
+                "📥 <b>RESTORE DATA</b>\n\n"
+                "Apna <code>raunak_mm_backup.json</code> "
+                "file yahan send karo.\n\n"
+                "⚠️ Sirf Raunak MM ka valid backup "
+                "file send karo."
+            ),
+            parse_mode="HTML"
+        )
 
 
-        # ======================================
+    # ======================================
     # RECEIVE RESTORE FILE
     # ======================================
 
@@ -293,15 +258,14 @@ def automatic_backup(bot):
     )
     def restore_document(message):
 
-        # ADMIN ONLY
         if message.from_user.id not in ADMIN_IDS:
             return
 
-        # FILE CHECK
         if not message.document.file_name:
             return
 
         if not message.document.file_name.lower().endswith(".json"):
+
             bot.reply_to(
                 message,
                 "❌ Sirf .json backup file send karo."
@@ -310,7 +274,6 @@ def automatic_backup(bot):
 
         try:
 
-            # GET TELEGRAM FILE
             file_info = bot.get_file(
                 message.document.file_id
             )
@@ -319,28 +282,9 @@ def automatic_backup(bot):
                 file_info.file_path
             )
 
-            # READ JSON
             backup_data = json.loads(
                 downloaded_file.decode("utf-8")
             )
-
-            # ==================================
-            # VALIDATE BACKUP
-            # ==================================
-
-            if (
-                "raunak_mm" not in backup_data
-                or "users" not in backup_data
-            ):
-                bot.reply_to(
-                    message,
-                    "❌ Invalid Raunak MM backup file."
-                )
-                return
-
-            # ==================================
-            # RESTORE
-            # ==================================
 
             success = restore_backup_data(
                 backup_data
@@ -348,18 +292,10 @@ def automatic_backup(bot):
 
             if success:
 
-                raunak = backup_data["raunak_mm"]
-
                 bot.reply_to(
                     message,
                     (
                         "✅ <b>DATA RESTORED</b>\n\n"
-                        f"👑 Deals: "
-                        f"<b>{raunak.get('total_deals', 0)}</b>\n"
-                        f"💰 Amount: "
-                        f"<b>₹{raunak.get('total_amount', 0):g}</b>\n"
-                        f"👥 Users: "
-                        f"<b>{len(backup_data.get('users', []))}</b>\n\n"
                         "🏆 Leaderboard data successfully restored."
                     ),
                     parse_mode="HTML"
@@ -421,6 +357,7 @@ def automatic_backup(bot):
             parse_mode="HTML"
         )
 
+
     # ======================================
     # HELP
     # ======================================
@@ -475,8 +412,6 @@ def automatic_backup(bot):
         )
 
 
-
-    
     # ======================================
     # BACK TO ADMIN PANEL
     # ======================================
@@ -510,74 +445,86 @@ def automatic_backup(bot):
         )
 
 
+# ==========================================
+# AUTOMATIC DAILY BACKUP
+# ==========================================
 
-    # ======================================
-    # RESTORE DATA BUTTON
-    # ======================================
+def automatic_backup(bot):
 
-    @bot.callback_query_handler(
-        func=lambda call:
-        call.data == "restore_data"
-    )
-    def restore_data_button(call):
+    while True:
 
-        if call.from_user.id not in ADMIN_IDS:
+        try:
 
-            bot.answer_callback_query(
-                call.id,
-                "❌ Access denied.",
-                show_alert=True
+            now = datetime.now(
+                ZoneInfo(BACKUP_TIMEZONE)
             )
-            return
 
-        bot.answer_callback_query(call.id)
+            if now.hour == 0 and now.minute == 0:
 
-        bot.send_message(
-            call.message.chat.id,
-            (
-                "📥 <b>RESTORE DATA</b>\n\n"
-                "Apna <code>raunak_mm_backup.json</code> "
-                "file yahan send karo.\n\n"
-                "⚠️ Sirf Raunak MM ka valid backup "
-                "file send karo."
-            ),
-            parse_mode="HTML"
-        )
-        
+                backup_data = get_backup_data()
 
-# ==========================================
-# BACKUP KEYBOARD
-# ==========================================
+                backup_text = json.dumps(
+                    backup_data,
+                    indent=4,
+                    ensure_ascii=False
+                )
 
-def backup_keyboard():
+                backup_file = "raunak_mm_auto_backup.json"
 
-    keyboard = types.InlineKeyboardMarkup(
-        row_width=1
-    )
+                with open(
+                    backup_file,
+                    "w",
+                    encoding="utf-8"
+                ) as file:
 
-    keyboard.add(
-        types.InlineKeyboardButton(
-            "📤 Manual Backup",
-            callback_data="manual_backup"
-        )
-    )
+                    file.write(backup_text)
 
-    keyboard.add(
-        types.InlineKeyboardButton(
-            "📥 Restore Data",
-            callback_data="restore_data"
-        )
-    )
+                for admin_id in ADMIN_IDS:
 
-    keyboard.add(
-        types.InlineKeyboardButton(
-            "⬅️ Back",
-            callback_data="admin_panel_back"
-        )
-    )
+                    try:
 
-    return keyboard
-    
+                        with open(
+                            backup_file,
+                            "rb"
+                        ) as file:
+
+                            bot.send_document(
+                                admin_id,
+                                file,
+                                caption=(
+                                    "🤖 <b>AUTOMATIC BACKUP</b>\n\n"
+                                    "🕛 Daily 12:00 AM backup\n"
+                                    "✅ Leaderboard data saved."
+                                ),
+                                parse_mode="HTML"
+                            )
+
+                    except Exception as error:
+
+                        print(
+                            f"Automatic backup send error "
+                            f"for {admin_id}: {error}"
+                        )
+
+                try:
+                    os.remove(backup_file)
+                except Exception:
+                    pass
+
+                time.sleep(60)
+
+            else:
+
+                time.sleep(20)
+
+        except Exception as error:
+
+            print(
+                f"Automatic backup error: {error}"
+            )
+
+            time.sleep(30)
+
 
 # ==========================================
 # START AUTOMATIC BACKUP
@@ -592,8 +539,3 @@ def start_automatic_backup(bot):
     )
 
     backup_thread.start()
-
-
-
-
-
