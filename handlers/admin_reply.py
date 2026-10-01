@@ -22,7 +22,7 @@ def register_admin_reply(bot):
 
             bot.answer_callback_query(
                 call.id,
-                "❌ Sirf admin is option ko use kar sakta hai.",
+                "❌ Only admins can use this option.",
                 show_alert=True
             )
 
@@ -56,8 +56,7 @@ def register_admin_reply(bot):
         msg = bot.send_message(
             call.message.chat.id,
             "✍️ *Reply to User*\n\n"
-            "Ab jo message user ko bhejna hai, "
-            "wo send karo.",
+            "Please send the message you want to forward to the user. ",
             parse_mode="Markdown"
         )
 
@@ -86,7 +85,7 @@ def send_reply_to_user(bot, message, user_id):
 
         bot.send_message(
             message.chat.id,
-            "❌ Sirf admin user ko reply kar sakta hai."
+            "❌ Only admins can reply to users."
         )
 
         return
@@ -109,7 +108,7 @@ def send_reply_to_user(bot, message, user_id):
 
         bot.send_message(
             message.chat.id,
-            "✅ *Reply user ko successfully send ho gaya.*",
+            "✅ *Reply sent successfully to the user.*",
             parse_mode="Markdown"
         )
 
@@ -119,5 +118,5 @@ def send_reply_to_user(bot, message, user_id):
 
         bot.send_message(
             message.chat.id,
-            "❌ User ko reply send nahi ho paya."
+            "❌ Unable to send a reply to the user."
       )
