@@ -10,6 +10,8 @@ ADMIN_IDS = [
   8731225978
 ]
 
+BACKUP_TIMEZONE = "Asia/Kolkata"
+
 
 # ==============================
 # REQUIRED CHANNELS
