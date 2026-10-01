@@ -29,9 +29,8 @@ def register_user_message(bot):
 
         bot.send_message(
             call.message.chat.id,
-            "💬 *Message to MM*\n\n"
-            "Apna message bhejo.\n"
-            "Aap koi bhi custom message bhej sakte ho.",
+            "*💬 𝘚𝘦𝘯𝘥 𝘠𝘰𝘶𝘳 𝘔𝘦𝘴𝘴𝘢𝘨𝘦*\n\n"
+            "Write your message below and send it to MM.",
             parse_mode="Markdown"
         )
 
@@ -109,7 +108,7 @@ def register_user_message(bot):
             except Exception as error:
 
                 print(
-                    f"Admin {admin_id} ko message nahi gaya: {error}"
+                    f"❌ Message could not be sent to Admin {admin_id}.\n\nError: {error}"
                 )
 
 
@@ -119,7 +118,7 @@ def register_user_message(bot):
 
         bot.send_message(
             message.chat.id,
-            "✅ *Message MM ko send ho gaya.*\n\n"
-            "MM aapko yahin reply karega.",
+            "✅ *Message sent to MM successfully.*\n"
+            "MM will reply to you here.",
             parse_mode="Markdown"
       )
