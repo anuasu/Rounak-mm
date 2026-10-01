@@ -3,7 +3,10 @@ from telebot import types
 from config import ADMIN_IDS
 import json
 
-from database.database import get_backup_data
+from database.database import (
+    get_backup_data,
+    restore_backup_data
+)
 
 # ==========================================
 # ADMIN PANEL KEYBOARD
@@ -294,6 +297,40 @@ def register_admin_panel(bot):
         )
 
 
+
+    # ======================================
+    # RESTORE DATA BUTTON
+    # ======================================
+
+    @bot.callback_query_handler(
+        func=lambda call:
+        call.data == "restore_data"
+    )
+    def restore_data_button(call):
+
+        if call.from_user.id not in ADMIN_IDS:
+
+            bot.answer_callback_query(
+                call.id,
+                "❌ Access denied.",
+                show_alert=True
+            )
+            return
+
+        bot.answer_callback_query(call.id)
+
+        bot.send_message(
+            call.message.chat.id,
+            (
+                "📥 <b>RESTORE DATA</b>\n\n"
+                "Apna <code>raunak_mm_backup.json</code> "
+                "file yahan send karo.\n\n"
+                "⚠️ Sirf Raunak MM ka valid backup "
+                "file send karo."
+            ),
+            parse_mode="HTML"
+        )
+        
 
 # ==========================================
 # BACKUP KEYBOARD
