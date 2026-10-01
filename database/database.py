@@ -87,6 +87,28 @@ def init_database():
     )
 """)
 
+
+    # ======================================
+    # LEADERBOARD RESTORE STATS
+    # ======================================
+
+    cursor.execute("""
+        CREATE TABLE IF NOT EXISTS leaderboard_stats (
+            id INTEGER PRIMARY KEY CHECK (id = 1),
+            total_deals INTEGER DEFAULT 0,
+            total_amount REAL DEFAULT 0
+        )
+    """)
+
+    cursor.execute("""
+        INSERT OR IGNORE INTO leaderboard_stats (
+            id,
+            total_deals,
+            total_amount
+        )
+        VALUES (1, 0, 0)
+    """)
+
     connection.commit()
     connection.close()
 
@@ -249,6 +271,21 @@ def complete_deal(deal_id):
         now,
         deal_id
     ))
+    
+    
+    # --------------------------------------
+    # UPDATE RAUNAK MM STATS
+    # --------------------------------------
+
+    cursor.execute("""
+        UPDATE leaderboard_stats
+        SET
+            total_deals = total_deals + 1,
+            total_amount = total_amount + ?
+        WHERE id = 1
+    """, (
+        deal["deal_amount"],
+    ))    
 
     # --------------------------------------
     # User 1 update
@@ -419,7 +456,8 @@ def update_payment(deal_id, amount):
 
     connection.commit()
     connection.close()
-
+    
+    
 # ==========================================
 # RAUNAK MM TOTAL STATS
 # ==========================================
@@ -431,10 +469,10 @@ def get_mm_stats():
 
     cursor.execute("""
         SELECT
-            COUNT(*) AS total_deals,
-            COALESCE(SUM(deal_amount), 0) AS total_amount
-        FROM deals
-        WHERE status = 'completed'
+            total_deals,
+            total_amount
+        FROM leaderboard_stats
+        WHERE id = 1
     """)
 
     stats = cursor.fetchone()
@@ -442,7 +480,8 @@ def get_mm_stats():
     connection.close()
 
     return stats
-
+    
+    
 # ==========================================
 # SEARCH USER
 # ==========================================
@@ -698,3 +737,110 @@ def get_backup_data():
 
         "users": user_data
     }
+
+
+
+# ==========================================
+# RESTORE BACKUP DATA
+# ==========================================
+
+def restore_backup_data(backup_data):
+
+    connection = get_connection()
+    cursor = connection.cursor()
+
+    try:
+
+        # ==================================
+        # RAUNAK MM STATS
+        # ==================================
+
+        raunak_data = backup_data.get(
+            "raunak_mm",
+            {}
+        )
+
+        total_deals = int(
+            raunak_data.get(
+                "total_deals",
+                0
+            )
+        )
+
+        total_amount = float(
+            raunak_data.get(
+                "total_amount",
+                0
+            )
+        )
+
+        cursor.execute("""
+            UPDATE leaderboard_stats
+            SET
+                total_deals = ?,
+                total_amount = ?
+            WHERE id = 1
+        """, (
+            total_deals,
+            total_amount
+        ))
+
+        # ==================================
+        # USERS
+        # ==================================
+
+        users = backup_data.get(
+            "users",
+            []
+        )
+
+        for user in users:
+
+            now = datetime.now().isoformat()
+
+            cursor.execute("""
+                INSERT INTO users (
+                    chat_id,
+                    first_name,
+                    username,
+                    completed_deals,
+                    total_deal_amount,
+                    created_at,
+                    updated_at
+                )
+                VALUES (?, ?, ?, ?, ?, ?, ?)
+
+                ON CONFLICT(chat_id)
+                DO UPDATE SET
+                    first_name = excluded.first_name,
+                    username = excluded.username,
+                    completed_deals = excluded.completed_deals,
+                    total_deal_amount = excluded.total_deal_amount,
+                    updated_at = excluded.updated_at
+            """, (
+                user["user_id"],
+                user.get("first_name", ""),
+                user.get("username", ""),
+                user.get("deals", 0),
+                user.get("amount", 0),
+                now,
+                now
+            ))
+
+        connection.commit()
+
+        return True
+
+    except Exception as error:
+
+        connection.rollback()
+
+        print(
+            f"Restore error: {error}"
+        )
+
+        return False
+
+    finally:
+
+        connection.close()
