@@ -75,7 +75,7 @@ def main_menu_keyboard():
 
 
 def is_user_joined(bot, user_id):
-    channels = [CHANNEL_1, CHANNEL_2]
+    channels = [CHANNEL_1, CHANNEL_2, CHANNEL_3]
 
     for channel in channels:
         try:
