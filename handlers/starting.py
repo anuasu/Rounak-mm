@@ -29,6 +29,13 @@ def join_keyboard():
             url=CHANNEL_2_LINK
         )
     )
+    
+    keyboard.add(
+        types.InlineKeyboardButton(
+            CHANNEL_3_BUTTON,
+            url=CHANNEL_3_LINK
+        )
+    )
 
     keyboard.add(
         types.InlineKeyboardButton(
