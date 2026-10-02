@@ -21,13 +21,21 @@ from commands.admin_panel import (
     register_admin_panel,
     start_automatic_backup
 )
-from commands.clean import register_clean
+from commands.clean import (
+    register_clean,
+    install_message_tracker
+)
 
 
 init_database()
 
 
 bot = telebot.TeleBot(BOT_TOKEN)
+
+
+# CLEAN MESSAGE TRACKER
+
+install_message_tracker(bot)
 
 
 register_start_handlers(bot)
@@ -48,8 +56,9 @@ start_automatic_backup(bot)
 register_clean(bot)
 
 
-
-
 print("🤖 Rounak MM Bot is starting...")
 
-bot.infinity_polling(skip_pending=True)
+
+bot.infinity_polling(
+    skip_pending=True
+)
