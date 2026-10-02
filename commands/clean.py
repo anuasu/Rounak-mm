@@ -7,7 +7,12 @@ from config import ADMIN_IDS
 
 tracked_messages = {}
 tracked_users = {}
+
+# Bot ne jo invite link generate kiya hai
 managed_invite_links = {}
+
+# Bot ne jo invite-link message bheja tha uska message ID
+managed_link_messages = {}
 
 
 # =========================================================
@@ -32,9 +37,7 @@ def track_message(message):
     tracked_messages.setdefault(
         chat_id,
         set()
-    ).add(
-        message.message_id
-    )
+    ).add(message.message_id)
 
     user = getattr(
         message,
@@ -43,33 +46,10 @@ def track_message(message):
     )
 
     if user:
-
         tracked_users.setdefault(
             chat_id,
             set()
-        ).add(
-            user.id
-        )
-
-
-# =========================================================
-# TRACK MESSAGE ID
-# =========================================================
-
-def track_message_id(
-    chat_id,
-    message_id
-):
-
-    if not chat_id or not message_id:
-        return
-
-    tracked_messages.setdefault(
-        chat_id,
-        set()
-    ).add(
-        message_id
-    )
+        ).add(user.id)
 
 
 # =========================================================
@@ -123,7 +103,6 @@ def install_message_tracker(bot):
         "send_media_group"
     ]
 
-
     for method_name in methods:
 
         original_method = getattr(
@@ -135,16 +114,9 @@ def install_message_tracker(bot):
         if not original_method:
             continue
 
+        def make_wrapper(original, name):
 
-        def make_wrapper(
-            original,
-            name
-        ):
-
-            def wrapper(
-                *args,
-                **kwargs
-            ):
+            def wrapper(*args, **kwargs):
 
                 result = original(
                     *args,
@@ -172,7 +144,6 @@ def install_message_tracker(bot):
 
             return wrapper
 
-
         setattr(
             bot,
             method_name,
@@ -181,7 +152,6 @@ def install_message_tracker(bot):
                 method_name
             )
         )
-
 
     print("✅ CLEAN MEMORY TRACKER READY")
 
@@ -194,9 +164,12 @@ def register_clean(bot):
 
     print("✅ CLEAN SYSTEM REGISTERED")
 
+    # Message tracker install
+    install_message_tracker(bot)
+
 
     # =====================================================
-    # /clean
+    # /clean COMMAND
     # =====================================================
 
     @bot.message_handler(commands=["clean"])
@@ -208,6 +181,9 @@ def register_clean(bot):
             f"User: {message.from_user.id}"
         )
 
+        # =================================================
+        # GROUP ONLY
+        # =================================================
 
         if message.chat.type not in [
             "group",
@@ -215,23 +191,23 @@ def register_clean(bot):
         ]:
             return
 
+        # =================================================
+        # ADMIN ONLY
+        # =================================================
 
         if message.from_user.id not in ADMIN_IDS:
             return
 
-
         chat_id = message.chat.id
 
-
         # =================================================
-        # TRACK /CLEAN MESSAGE
+        # SAVE /CLEAN MESSAGE
         # =================================================
 
         track_message(message)
 
-
         # =================================================
-        # START MESSAGE
+        # CLEAN START MESSAGE
         # =================================================
 
         start_message = bot.send_message(
@@ -242,15 +218,17 @@ def register_clean(bot):
                 "🗑️ Group ke tracked messages clear kiye ja rahe hain.\n"
                 "🤖 Bot ke messages bhi clear kiye jayenge.\n"
                 "🔗 Purana invite link revoke karke "
-                "naya link generate kiya jayega.\n\n"
+                "fresh link generate kiya jayega.\n\n"
                 "⏳ <b>Please wait...</b>"
             ),
             parse_mode="HTML"
         )
 
+        track_message(start_message)
+
 
         # =================================================
-        # GET ADMINS
+        # GET GROUP ADMINS
         # =================================================
 
         try:
@@ -284,7 +262,6 @@ def register_clean(bot):
             set()
         ).copy()
 
-
         for user_id in users:
 
             if user_id in admin_ids:
@@ -292,11 +269,14 @@ def register_clean(bot):
 
             try:
 
+                # Temporary ban
                 bot.ban_chat_member(
                     chat_id,
                     user_id
                 )
 
+                # Immediately unban
+                # User permanently banned nahi rahega
                 bot.unban_chat_member(
                     chat_id,
                     user_id,
@@ -314,7 +294,7 @@ def register_clean(bot):
 
 
         # =================================================
-        # DELETE TRACKED MESSAGES
+        # DELETE ALL TRACKED MESSAGES
         # =================================================
 
         deleted = 0
@@ -324,16 +304,29 @@ def register_clean(bot):
             set()
         ).copy()
 
-
+        # /clean message
         messages.add(
             message.message_id
         )
 
+        # CLEAN STARTED message
         messages.add(
             start_message.message_id
         )
 
+        # Previous new-link message
+        old_link_message_id = managed_link_messages.get(
+            chat_id
+        )
 
+        if old_link_message_id:
+
+            messages.add(
+                old_link_message_id
+            )
+
+
+        # Delete every tracked message
         for message_id in messages:
 
             try:
@@ -361,6 +354,7 @@ def register_clean(bot):
             chat_id
         )
 
+        old_link_revoked = False
 
         if old_link:
 
@@ -371,8 +365,10 @@ def register_clean(bot):
                     old_link
                 )
 
+                old_link_revoked = True
+
                 print(
-                    "✅ Old managed invite link revoked."
+                    "✅ Old invite link revoked."
                 )
 
             except Exception as error:
@@ -383,11 +379,10 @@ def register_clean(bot):
 
 
         # =================================================
-        # NEW INVITE LINK
+        # CREATE NEW INVITE LINK
         # =================================================
 
         new_link = None
-
 
         try:
 
@@ -413,7 +408,7 @@ def register_clean(bot):
 
 
         # =================================================
-        # CLEAR TEMPORARY MEMORY
+        # RESET OLD TRACKING
         # =================================================
 
         tracked_messages.pop(
@@ -426,23 +421,85 @@ def register_clean(bot):
             None
         )
 
+        # Old link message ka record remove
+        managed_link_messages.pop(
+            chat_id,
+            None
+        )
+
 
         # =================================================
-        # SEND ONLY NEW LINK
+        # CLEAN COMPLETED MESSAGE
         # =================================================
 
-        if new_link:
+        result = (
+            "✅ <b>CLEAN COMPLETED</b>\n\n"
+            f"👥 Members removed: <b>{removed}</b>\n"
+            f"🧹 Messages deleted: <b>{deleted}</b>\n"
+        )
 
-            bot.send_message(
-                chat_id,
-                new_link
+        if old_link_revoked:
+
+            result += (
+                "🔒 Old invite link: <b>Revoked</b>\n"
             )
 
         else:
 
-            bot.send_message(
+            result += (
+                "⚠️ Old invite link: <b>Not found</b>\n"
+            )
+
+        if new_link:
+
+            result += (
+                "🔗 New invite link: <b>Generated</b>"
+            )
+
+        else:
+
+            result += (
+                "❌ New invite link: <b>Failed</b>"
+            )
+
+
+        result_message = bot.send_message(
+            chat_id,
+            result,
+            parse_mode="HTML"
+        )
+
+
+        # =================================================
+        # NEW LINK — SEPARATE MESSAGE
+        # =================================================
+
+        if new_link:
+
+            new_link_message = bot.send_message(
+                chat_id,
+                new_link
+            )
+
+            # Is link message ko next /clean ke liye save karo
+            managed_link_messages[
+                chat_id
+            ] = new_link_message.message_id
+
+            # New link message ko tracking mein bhi rakho
+            track_message(
+                new_link_message
+            )
+
+        else:
+
+            error_message = bot.send_message(
                 chat_id,
                 "❌ New invite link generate nahi ho paya."
+            )
+
+            track_message(
+                error_message
             )
 
 
