@@ -244,7 +244,7 @@ def register_hold(bot):
         hold_message = bot.send_message(
             message.chat.id,
             (
-                "🔒 <b>PAYMENT ON HOLD</b>\n\n"
+                f"🔒 <b>PAYMENT ON HOLD — {hold_text}</b>\n\n"
 
                 f"💰 <b>{received_text} RECEIVED</b>\n"
                 f"🔐 <b>{hold_text} HOLD</b>\n"
@@ -274,4 +274,4 @@ def register_hold(bot):
 
             print(
                 f"Hold pin error: {error}"
-      )
+            )
