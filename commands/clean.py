@@ -43,18 +43,24 @@ def register_clean(bot):
         if message.chat.type not in ["group", "supergroup"]:
             return
 
+        # /clean command ko tracking mein add mat karo
+        if message.text and message.text.lower().strip() == "/clean":
+            return
+
         chat_id = message.chat.id
-        user_id = message.from_user.id
 
-        # Message ID save
-        tracked_messages.setdefault(chat_id, set()).add(
-            message.message_id
-        )
+        # Message track
+        tracked_messages.setdefault(
+            chat_id,
+            set()
+        ).add(message.message_id)
 
-        # User save
-        tracked_users.setdefault(chat_id, set()).add(
-            user_id
-        )
+        # User track
+        if message.from_user:
+            tracked_users.setdefault(
+                chat_id,
+                set()
+            ).add(message.from_user.id)
 
 
     # ======================================
@@ -71,9 +77,10 @@ def register_clean(bot):
 
         chat_id = message.chat.id
 
-        tracked_messages.setdefault(chat_id, set()).add(
-            message.message_id
-        )
+        tracked_messages.setdefault(
+            chat_id,
+            set()
+        ).add(message.message_id)
 
         for member in message.new_chat_members:
 
@@ -84,15 +91,18 @@ def register_clean(bot):
 
 
     # ======================================
-    # .CLEAN COMMAND
+    # /clean COMMAND
     # ======================================
 
-    @bot.message_handler(commands=["clean"])
+    @bot.message_handler(
+        commands=["clean"]
+    )
     def clean_command(message):
 
         if message.chat.type not in ["group", "supergroup"]:
             return
 
+        # ADMIN ONLY
         if message.from_user.id not in ADMIN_IDS:
             return
 
@@ -100,10 +110,12 @@ def register_clean(bot):
 
         bot.reply_to(
             message,
-            "🧹 <b>CLEAN STARTED</b>\n\n"
-            "👥 Members remove ho rahe hain...\n"
-            "🗑️ Messages clear ho rahe hain...\n"
-            "🔗 New invite link generate hoga.",
+            (
+                "🧹 <b>CLEAN STARTED</b>\n\n"
+                "👥 Members remove ho rahe hain...\n"
+                "🗑️ Messages clear ho rahe hain...\n"
+                "🔗 New invite link generate hoga."
+            ),
             parse_mode="HTML"
         )
 
@@ -148,12 +160,16 @@ def register_clean(bot):
 
         for user_id in users:
 
+            # Admin ko remove mat karo
             if user_id in admin_ids:
                 continue
 
             try:
 
-                # Remove user without permanent ban
+                # Temporary ban + immediately unban
+                # = user group se remove hoga,
+                # permanently banned nahi rahega.
+
                 bot.ban_chat_member(
                     chat_id,
                     user_id
@@ -209,7 +225,7 @@ def register_clean(bot):
 
         try:
 
-            # Old bot-managed link revoke
+            # Previous bot-managed link revoke
             old_link = managed_invite_links.get(
                 chat_id
             )
@@ -229,7 +245,7 @@ def register_clean(bot):
                         f"Old invite revoke error: {error}"
                     )
 
-            # New link
+            # Generate new invite link
             invite = bot.create_chat_invite_link(
                 chat_id
             )
@@ -245,7 +261,7 @@ def register_clean(bot):
             )
 
         # ==================================
-        # CLEAR MEMORY
+        # CLEAR TEMPORARY MEMORY
         # ==================================
 
         tracked_messages.pop(
@@ -271,7 +287,7 @@ def register_clean(bot):
         if new_link:
 
             result += (
-                "🔗 <b>NEW GC LINK</b>\n"
+                "🔗 <b>NEW GC LINK</b>\n\n"
                 f"{new_link}"
             )
 
@@ -285,4 +301,4 @@ def register_clean(bot):
             chat_id,
             result,
             parse_mode="HTML"
-            )
+        )
