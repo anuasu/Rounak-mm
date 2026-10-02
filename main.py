@@ -21,7 +21,7 @@ from commands.admin_panel import (
     register_admin_panel,
     start_automatic_backup
 )
-
+from commands.clean import register_clean
 
 
 init_database()
@@ -45,6 +45,7 @@ register_voucher(bot)
 register_form(bot)
 register_admin_panel(bot)
 start_automatic_backup(bot)
+register_clean(bot)
 
 
 
