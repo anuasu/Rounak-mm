@@ -507,6 +507,19 @@ def register_admin_panel(bot):
                 
                 "🧾 <code>.voucher amount</code>\n"
                 "Voucher generate karne ke liye.\n\n"                        
+                
+                
+                "⚙️ <code>/setfee</code>\n"
+"MM fee image set/update karne ke liye.\n\n"
+
+                "📱 <code>/setqr 1</code> - <code>/setqr 10</code>\n"
+"QR payment image set/update karne ke liye.\n\n"
+
+                "🧹 <code>/clean</code>\n"
+"GC members aur tracked messages clean karke new invite link generate karne ke liye.\n\n"
+                
+                
+                
 
                 "🏆 <b>Leaderboard</b>\n"
                 "MM aur users ki deal statistics."
