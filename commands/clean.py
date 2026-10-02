@@ -1,4 +1,3 @@
-from telebot import types
 from config import ADMIN_IDS
 
 
@@ -17,35 +16,21 @@ managed_invite_links = {}
 
 def register_clean(bot):
 
+    print("✅ CLEAN SYSTEM REGISTERED")
+
     # ======================================
     # TRACK GROUP MESSAGES
     # ======================================
 
     @bot.message_handler(
-        content_types=[
-            "text",
-            "photo",
-            "video",
-            "document",
-            "audio",
-            "voice",
-            "animation",
-            "sticker",
-            "video_note",
-            "location",
-            "contact",
-            "venue",
-            "poll"
-        ]
+        func=lambda message:
+            message.chat.type in ["group", "supergroup"]
+            and not (
+                message.text
+                and message.text.lower().strip() == "/clean"
+            )
     )
     def track_group_messages(message):
-
-        if message.chat.type not in ["group", "supergroup"]:
-            return
-
-        # /clean command ko tracking mein add mat karo
-        if message.text and message.text.lower().strip() == "/clean":
-            return
 
         chat_id = message.chat.id
 
@@ -72,7 +57,10 @@ def register_clean(bot):
     )
     def track_new_members(message):
 
-        if message.chat.type not in ["group", "supergroup"]:
+        if message.chat.type not in [
+            "group",
+            "supergroup"
+        ]:
             return
 
         chat_id = message.chat.id
@@ -94,12 +82,20 @@ def register_clean(bot):
     # /clean COMMAND
     # ======================================
 
-    @bot.message_handler(
-        commands=["clean"]
-    )
+    @bot.message_handler(commands=["clean"])
     def clean_command(message):
 
-        if message.chat.type not in ["group", "supergroup"]:
+        print(
+            f"🔥 /clean received | "
+            f"Chat: {message.chat.id} | "
+            f"User: {message.from_user.id}"
+        )
+
+        # GROUP ONLY
+        if message.chat.type not in [
+            "group",
+            "supergroup"
+        ]:
             return
 
         # ADMIN ONLY
@@ -107,6 +103,10 @@ def register_clean(bot):
             return
 
         chat_id = message.chat.id
+
+        # ==================================
+        # START MESSAGE
+        # ==================================
 
         bot.reply_to(
             message,
@@ -137,7 +137,7 @@ def register_clean(bot):
         except Exception as error:
 
             print(
-                f"Admin list error: {error}"
+                f"❌ Admin list error: {error}"
             )
 
             bot.send_message(
@@ -147,8 +147,9 @@ def register_clean(bot):
 
             return
 
+
         # ==================================
-        # REMOVE TRACKED NON-ADMINS
+        # REMOVE NON-ADMINS
         # ==================================
 
         removed = 0
@@ -160,21 +161,19 @@ def register_clean(bot):
 
         for user_id in users:
 
-            # Admin ko remove mat karo
             if user_id in admin_ids:
                 continue
 
             try:
 
-                # Temporary ban + immediately unban
-                # = user group se remove hoga,
-                # permanently banned nahi rahega.
-
+                # Remove from group
                 bot.ban_chat_member(
                     chat_id,
                     user_id
                 )
 
+                # Immediately unban
+                # User permanently banned nahi rahega
                 bot.unban_chat_member(
                     chat_id,
                     user_id,
@@ -186,8 +185,9 @@ def register_clean(bot):
             except Exception as error:
 
                 print(
-                    f"Remove user {user_id} error: {error}"
+                    f"❌ Remove user {user_id} error: {error}"
                 )
+
 
         # ==================================
         # DELETE TRACKED MESSAGES
@@ -214,8 +214,9 @@ def register_clean(bot):
             except Exception as error:
 
                 print(
-                    f"Delete message {message_id} error: {error}"
+                    f"❌ Delete message {message_id} error: {error}"
                 )
+
 
         # ==================================
         # CREATE NEW INVITE LINK
@@ -225,11 +226,11 @@ def register_clean(bot):
 
         try:
 
-            # Previous bot-managed link revoke
             old_link = managed_invite_links.get(
                 chat_id
             )
 
+            # Revoke previous bot-managed link
             if old_link:
 
                 try:
@@ -242,10 +243,10 @@ def register_clean(bot):
                 except Exception as error:
 
                     print(
-                        f"Old invite revoke error: {error}"
+                        f"⚠️ Old link revoke error: {error}"
                     )
 
-            # Generate new invite link
+            # Create new link
             invite = bot.create_chat_invite_link(
                 chat_id
             )
@@ -257,8 +258,9 @@ def register_clean(bot):
         except Exception as error:
 
             print(
-                f"New invite link error: {error}"
+                f"❌ New invite link error: {error}"
             )
+
 
         # ==================================
         # CLEAR TEMPORARY MEMORY
@@ -273,6 +275,7 @@ def register_clean(bot):
             chat_id,
             None
         )
+
 
         # ==================================
         # RESULT
