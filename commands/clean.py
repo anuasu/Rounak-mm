@@ -34,14 +34,15 @@ def register_clean(bot):
 
         chat_id = message.chat.id
 
-        # Message track
+        # Track message
         tracked_messages.setdefault(
             chat_id,
             set()
         ).add(message.message_id)
 
-        # User track
+        # Track user
         if message.from_user:
+
             tracked_users.setdefault(
                 chat_id,
                 set()
@@ -91,36 +92,45 @@ def register_clean(bot):
             f"User: {message.from_user.id}"
         )
 
+        # ==================================
         # GROUP ONLY
+        # ==================================
+
         if message.chat.type not in [
             "group",
             "supergroup"
         ]:
             return
 
+        # ==================================
         # ADMIN ONLY
+        # ==================================
+
         if message.from_user.id not in ADMIN_IDS:
             return
 
         chat_id = message.chat.id
 
+
         # ==================================
-        # START MESSAGE
+        # CLEAN START MESSAGE
         # ==================================
 
-        bot.reply_to(
+        start_message = bot.reply_to(
             message,
             (
-                "🧹 <b>CLEAN STARTED</b>\n\n"
-                "👥 Members remove ho rahe hain...\n"
-                "🗑️ Messages clear ho rahe hain...\n"
-                "🔗 New invite link generate hoga."
+                "🧹 <b>CLEAN PROCESS STARTED</b>\n\n"
+                "👥 Non-admin members remove kiye ja rahe hain.\n"
+                "🗑️ Bot ke active session ke tracked messages clear kiye ja rahe hain.\n"
+                "🔗 Existing invite link revoke karke fresh link generate kiya jayega.\n\n"
+                "⏳ Please wait..."
             ),
             parse_mode="HTML"
         )
 
+
         # ==================================
-        # GET ADMINS
+        # GET GROUP ADMINS
         # ==================================
 
         try:
@@ -142,14 +152,14 @@ def register_clean(bot):
 
             bot.send_message(
                 chat_id,
-                "❌ Admin list get nahi ho paayi."
+                "❌ Group admins ki list get nahi ho paayi."
             )
 
             return
 
 
         # ==================================
-        # REMOVE NON-ADMINS
+        # REMOVE TRACKED NON-ADMINS
         # ==================================
 
         removed = 0
@@ -161,19 +171,20 @@ def register_clean(bot):
 
         for user_id in users:
 
+            # Admin ko touch nahi karna
             if user_id in admin_ids:
                 continue
 
             try:
 
-                # Remove from group
+                # User ko group se remove karo
                 bot.ban_chat_member(
                     chat_id,
                     user_id
                 )
 
                 # Immediately unban
-                # User permanently banned nahi rahega
+                # Isse permanent ban nahi rahega
                 bot.unban_chat_member(
                     chat_id,
                     user_id,
@@ -219,6 +230,71 @@ def register_clean(bot):
 
 
         # ==================================
+        # GET OLD INVITE LINK
+        # ==================================
+
+        old_link = managed_invite_links.get(
+            chat_id
+        )
+
+        # Agar memory mein link nahi hai,
+        # to Telegram se primary invite link lene ki koshish
+        if not old_link:
+
+            try:
+
+                chat_info = bot.get_chat(
+                    chat_id
+                )
+
+                old_link = getattr(
+                    chat_info,
+                    "invite_link",
+                    None
+                )
+
+            except Exception as error:
+
+                print(
+                    f"⚠️ Existing invite link get error: {error}"
+                )
+
+
+        # ==================================
+        # REVOKE OLD INVITE LINK
+        # ==================================
+
+        old_link_revoked = False
+
+        if old_link:
+
+            try:
+
+                bot.revoke_chat_invite_link(
+                    chat_id,
+                    old_link
+                )
+
+                old_link_revoked = True
+
+                print(
+                    "✅ Old invite link revoked."
+                )
+
+            except Exception as error:
+
+                print(
+                    f"⚠️ Old invite link revoke error: {error}"
+                )
+
+        else:
+
+            print(
+                "⚠️ No old invite link available to revoke."
+            )
+
+
+        # ==================================
         # CREATE NEW INVITE LINK
         # ==================================
 
@@ -226,39 +302,59 @@ def register_clean(bot):
 
         try:
 
-            old_link = managed_invite_links.get(
-                chat_id
-            )
-
-            # Revoke previous bot-managed link
-            if old_link:
-
-                try:
-
-                    bot.revoke_chat_invite_link(
-                        chat_id,
-                        old_link
-                    )
-
-                except Exception as error:
-
-                    print(
-                        f"⚠️ Old link revoke error: {error}"
-                    )
-
-            # Create new link
             invite = bot.create_chat_invite_link(
                 chat_id
             )
 
             new_link = invite.invite_link
 
+            # New link ko memory mein save karo
             managed_invite_links[chat_id] = new_link
+
+            print(
+                f"✅ New invite link created: {new_link}"
+            )
 
         except Exception as error:
 
             print(
                 f"❌ New invite link error: {error}"
+            )
+
+
+        # ==================================
+        # DELETE CLEAN START MESSAGE
+        # ==================================
+
+        try:
+
+            bot.delete_message(
+                chat_id,
+                start_message.message_id
+            )
+
+        except Exception as error:
+
+            print(
+                f"⚠️ Start message delete error: {error}"
+            )
+
+
+        # ==================================
+        # DELETE /clean COMMAND
+        # ==================================
+
+        try:
+
+            bot.delete_message(
+                chat_id,
+                message.message_id
+            )
+
+        except Exception as error:
+
+            print(
+                f"⚠️ /clean message delete error: {error}"
             )
 
 
@@ -278,30 +374,54 @@ def register_clean(bot):
 
 
         # ==================================
-        # RESULT
+        # CLEAN RESULT
         # ==================================
 
         result = (
             "✅ <b>CLEAN COMPLETED</b>\n\n"
             f"👥 Members removed: <b>{removed}</b>\n"
-            f"🧹 Messages deleted: <b>{deleted}</b>\n\n"
+            f"🧹 Messages deleted: <b>{deleted}</b>\n"
         )
 
-        if new_link:
+        if old_link_revoked:
 
             result += (
-                "🔗 <b>NEW GC LINK</b>\n\n"
-                f"{new_link}"
+                "🔒 Old invite link: <b>Revoked</b>\n"
             )
 
         else:
 
             result += (
-                "❌ New invite link generate nahi ho paya."
+                "⚠️ Old invite link: <b>Could not revoke</b>\n"
             )
+
+        if new_link:
+
+            result += (
+                "🔗 New invite link: <b>Generated</b>"
+            )
+
+        else:
+
+            result += (
+                "❌ New invite link: <b>Failed</b>"
+            )
+
 
         bot.send_message(
             chat_id,
             result,
             parse_mode="HTML"
         )
+
+
+        # ==================================
+        # SEND ONLY NEW LINK
+        # ==================================
+
+        if new_link:
+
+            bot.send_message(
+                chat_id,
+                new_link
+            )
