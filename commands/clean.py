@@ -1,87 +1,203 @@
 from config import ADMIN_IDS
 
 
-# ==========================================
+# =========================================================
 # TEMPORARY MEMORY
-# ==========================================
+# =========================================================
 
 tracked_messages = {}
 tracked_users = {}
 managed_invite_links = {}
 
 
-# ==========================================
-# REGISTER CLEAN SYSTEM
-# ==========================================
+# =========================================================
+# TRACK MESSAGE
+# =========================================================
+
+def track_message(message):
+
+    if not message:
+        return
+
+    chat = getattr(message, "chat", None)
+
+    if not chat:
+        return
+
+    if chat.type not in ["group", "supergroup"]:
+        return
+
+    chat_id = chat.id
+
+    tracked_messages.setdefault(
+        chat_id,
+        set()
+    ).add(
+        message.message_id
+    )
+
+    user = getattr(
+        message,
+        "from_user",
+        None
+    )
+
+    if user:
+
+        tracked_users.setdefault(
+            chat_id,
+            set()
+        ).add(
+            user.id
+        )
+
+
+# =========================================================
+# TRACK MESSAGE ID
+# =========================================================
+
+def track_message_id(
+    chat_id,
+    message_id
+):
+
+    if not chat_id or not message_id:
+        return
+
+    tracked_messages.setdefault(
+        chat_id,
+        set()
+    ).add(
+        message_id
+    )
+
+
+# =========================================================
+# INSTALL MESSAGE TRACKER
+# =========================================================
+
+def install_message_tracker(bot):
+
+    print("🧠 CLEAN MEMORY TRACKER INSTALLING...")
+
+    original_process = bot.process_new_messages
+
+    def tracked_process(messages):
+
+        for message in messages:
+
+            try:
+                track_message(message)
+
+            except Exception as error:
+                print(
+                    f"⚠️ Message tracking error: {error}"
+                )
+
+        return original_process(messages)
+
+    bot.process_new_messages = tracked_process
+
+
+    # =====================================================
+    # TRACK BOT SENT MESSAGES
+    # =====================================================
+
+    methods = [
+        "send_message",
+        "send_photo",
+        "send_video",
+        "send_document",
+        "send_audio",
+        "send_voice",
+        "send_animation",
+        "send_sticker",
+        "send_video_note",
+        "send_location",
+        "send_contact",
+        "send_venue",
+        "send_poll",
+        "send_dice",
+        "send_invoice",
+        "send_game",
+        "send_media_group"
+    ]
+
+
+    for method_name in methods:
+
+        original_method = getattr(
+            bot,
+            method_name,
+            None
+        )
+
+        if not original_method:
+            continue
+
+
+        def make_wrapper(
+            original,
+            name
+        ):
+
+            def wrapper(
+                *args,
+                **kwargs
+            ):
+
+                result = original(
+                    *args,
+                    **kwargs
+                )
+
+                try:
+
+                    if isinstance(result, list):
+
+                        for msg in result:
+                            track_message(msg)
+
+                    else:
+
+                        track_message(result)
+
+                except Exception as error:
+
+                    print(
+                        f"⚠️ {name} tracking error: {error}"
+                    )
+
+                return result
+
+            return wrapper
+
+
+        setattr(
+            bot,
+            method_name,
+            make_wrapper(
+                original_method,
+                method_name
+            )
+        )
+
+
+    print("✅ CLEAN MEMORY TRACKER READY")
+
+
+# =========================================================
+# REGISTER CLEAN
+# =========================================================
 
 def register_clean(bot):
 
     print("✅ CLEAN SYSTEM REGISTERED")
 
-    # ======================================
-    # TRACK GROUP MESSAGES
-    # ======================================
 
-    @bot.message_handler(
-        func=lambda message:
-            message.chat.type in ["group", "supergroup"]
-            and not (
-                message.text
-                and message.text.lower().strip() == "/clean"
-            )
-    )
-    def track_group_messages(message):
-
-        chat_id = message.chat.id
-
-        # Track message
-        tracked_messages.setdefault(
-            chat_id,
-            set()
-        ).add(message.message_id)
-
-        # Track user
-        if message.from_user:
-
-            tracked_users.setdefault(
-                chat_id,
-                set()
-            ).add(message.from_user.id)
-
-
-    # ======================================
-    # TRACK NEW MEMBERS
-    # ======================================
-
-    @bot.message_handler(
-        content_types=["new_chat_members"]
-    )
-    def track_new_members(message):
-
-        if message.chat.type not in [
-            "group",
-            "supergroup"
-        ]:
-            return
-
-        chat_id = message.chat.id
-
-        tracked_messages.setdefault(
-            chat_id,
-            set()
-        ).add(message.message_id)
-
-        for member in message.new_chat_members:
-
-            tracked_users.setdefault(
-                chat_id,
-                set()
-            ).add(member.id)
-
-
-    # ======================================
-    # /clean COMMAND
-    # ======================================
+    # =====================================================
+    # /clean
+    # =====================================================
 
     @bot.message_handler(commands=["clean"])
     def clean_command(message):
@@ -92,9 +208,6 @@ def register_clean(bot):
             f"User: {message.from_user.id}"
         )
 
-        # ==================================
-        # GROUP ONLY
-        # ==================================
 
         if message.chat.type not in [
             "group",
@@ -102,36 +215,43 @@ def register_clean(bot):
         ]:
             return
 
-        # ==================================
-        # ADMIN ONLY
-        # ==================================
 
         if message.from_user.id not in ADMIN_IDS:
             return
 
+
         chat_id = message.chat.id
 
 
-        # ==================================
-        # CLEAN START MESSAGE
-        # ==================================
+        # =================================================
+        # TRACK /CLEAN MESSAGE
+        # =================================================
 
-        start_message = bot.reply_to(
-            message,
+        track_message(message)
+
+
+        # =================================================
+        # START MESSAGE
+        # =================================================
+
+        start_message = bot.send_message(
+            chat_id,
             (
                 "🧹 <b>CLEAN PROCESS STARTED</b>\n\n"
                 "👥 Non-admin members remove kiye ja rahe hain.\n"
-                "🗑️ Bot ke active session ke tracked messages clear kiye ja rahe hain.\n"
-                "🔗 Existing invite link revoke karke fresh link generate kiya jayega.\n\n"
-                "⏳ Please wait..."
+                "🗑️ Group ke tracked messages clear kiye ja rahe hain.\n"
+                "🤖 Bot ke messages bhi clear kiye jayenge.\n"
+                "🔗 Purana invite link revoke karke "
+                "naya link generate kiya jayega.\n\n"
+                "⏳ <b>Please wait...</b>"
             ),
             parse_mode="HTML"
         )
 
 
-        # ==================================
-        # GET GROUP ADMINS
-        # ==================================
+        # =================================================
+        # GET ADMINS
+        # =================================================
 
         try:
 
@@ -150,17 +270,12 @@ def register_clean(bot):
                 f"❌ Admin list error: {error}"
             )
 
-            bot.send_message(
-                chat_id,
-                "❌ Group admins ki list get nahi ho paayi."
-            )
-
             return
 
 
-        # ==================================
-        # REMOVE TRACKED NON-ADMINS
-        # ==================================
+        # =================================================
+        # REMOVE NON-ADMINS
+        # =================================================
 
         removed = 0
 
@@ -169,22 +284,19 @@ def register_clean(bot):
             set()
         ).copy()
 
+
         for user_id in users:
 
-            # Admin ko touch nahi karna
             if user_id in admin_ids:
                 continue
 
             try:
 
-                # User ko group se remove karo
                 bot.ban_chat_member(
                     chat_id,
                     user_id
                 )
 
-                # Immediately unban
-                # Isse permanent ban nahi rahega
                 bot.unban_chat_member(
                     chat_id,
                     user_id,
@@ -196,13 +308,14 @@ def register_clean(bot):
             except Exception as error:
 
                 print(
-                    f"❌ Remove user {user_id} error: {error}"
+                    f"❌ Remove user "
+                    f"{user_id} error: {error}"
                 )
 
 
-        # ==================================
+        # =================================================
         # DELETE TRACKED MESSAGES
-        # ==================================
+        # =================================================
 
         deleted = 0
 
@@ -210,6 +323,16 @@ def register_clean(bot):
             chat_id,
             set()
         ).copy()
+
+
+        messages.add(
+            message.message_id
+        )
+
+        messages.add(
+            start_message.message_id
+        )
+
 
         for message_id in messages:
 
@@ -225,46 +348,19 @@ def register_clean(bot):
             except Exception as error:
 
                 print(
-                    f"❌ Delete message {message_id} error: {error}"
+                    f"⚠️ Delete message "
+                    f"{message_id} failed: {error}"
                 )
 
 
-        # ==================================
-        # GET OLD INVITE LINK
-        # ==================================
+        # =================================================
+        # OLD INVITE LINK
+        # =================================================
 
         old_link = managed_invite_links.get(
             chat_id
         )
 
-        # Agar memory mein link nahi hai,
-        # to Telegram se primary invite link lene ki koshish
-        if not old_link:
-
-            try:
-
-                chat_info = bot.get_chat(
-                    chat_id
-                )
-
-                old_link = getattr(
-                    chat_info,
-                    "invite_link",
-                    None
-                )
-
-            except Exception as error:
-
-                print(
-                    f"⚠️ Existing invite link get error: {error}"
-                )
-
-
-        # ==================================
-        # REVOKE OLD INVITE LINK
-        # ==================================
-
-        old_link_revoked = False
 
         if old_link:
 
@@ -275,30 +371,23 @@ def register_clean(bot):
                     old_link
                 )
 
-                old_link_revoked = True
-
                 print(
-                    "✅ Old invite link revoked."
+                    "✅ Old managed invite link revoked."
                 )
 
             except Exception as error:
 
                 print(
-                    f"⚠️ Old invite link revoke error: {error}"
+                    f"⚠️ Old invite revoke error: {error}"
                 )
 
-        else:
 
-            print(
-                "⚠️ No old invite link available to revoke."
-            )
-
-
-        # ==================================
-        # CREATE NEW INVITE LINK
-        # ==================================
+        # =================================================
+        # NEW INVITE LINK
+        # =================================================
 
         new_link = None
+
 
         try:
 
@@ -308,11 +397,12 @@ def register_clean(bot):
 
             new_link = invite.invite_link
 
-            # New link ko memory mein save karo
-            managed_invite_links[chat_id] = new_link
+            managed_invite_links[
+                chat_id
+            ] = new_link
 
             print(
-                f"✅ New invite link created: {new_link}"
+                "✅ New invite link created."
             )
 
         except Exception as error:
@@ -322,45 +412,9 @@ def register_clean(bot):
             )
 
 
-        # ==================================
-        # DELETE CLEAN START MESSAGE
-        # ==================================
-
-        try:
-
-            bot.delete_message(
-                chat_id,
-                start_message.message_id
-            )
-
-        except Exception as error:
-
-            print(
-                f"⚠️ Start message delete error: {error}"
-            )
-
-
-        # ==================================
-        # DELETE /clean COMMAND
-        # ==================================
-
-        try:
-
-            bot.delete_message(
-                chat_id,
-                message.message_id
-            )
-
-        except Exception as error:
-
-            print(
-                f"⚠️ /clean message delete error: {error}"
-            )
-
-
-        # ==================================
+        # =================================================
         # CLEAR TEMPORARY MEMORY
-        # ==================================
+        # =================================================
 
         tracked_messages.pop(
             chat_id,
@@ -373,51 +427,9 @@ def register_clean(bot):
         )
 
 
-        # ==================================
-        # CLEAN RESULT
-        # ==================================
-
-        result = (
-            "✅ <b>CLEAN COMPLETED</b>\n\n"
-            f"👥 Members removed: <b>{removed}</b>\n"
-            f"🧹 Messages deleted: <b>{deleted}</b>\n"
-        )
-
-        if old_link_revoked:
-
-            result += (
-                "🔒 Old invite link: <b>Revoked</b>\n"
-            )
-
-        else:
-
-            result += (
-                "⚠️ Old invite link: <b>Could not revoke</b>\n"
-            )
-
-        if new_link:
-
-            result += (
-                "🔗 New invite link: <b>Generated</b>"
-            )
-
-        else:
-
-            result += (
-                "❌ New invite link: <b>Failed</b>"
-            )
-
-
-        bot.send_message(
-            chat_id,
-            result,
-            parse_mode="HTML"
-        )
-
-
-        # ==================================
+        # =================================================
         # SEND ONLY NEW LINK
-        # ==================================
+        # =================================================
 
         if new_link:
 
@@ -425,3 +437,18 @@ def register_clean(bot):
                 chat_id,
                 new_link
             )
+
+        else:
+
+            bot.send_message(
+                chat_id,
+                "❌ New invite link generate nahi ho paya."
+            )
+
+
+        print(
+            f"✅ CLEAN COMPLETED | "
+            f"Chat={chat_id} | "
+            f"Removed={removed} | "
+            f"Deleted={deleted}"
+        )
