@@ -147,9 +147,11 @@ def register_payment(bot):
             active_deal["deal_id"],
             amount
         )
+
         complete_deal(
             active_deal["deal_id"]
         )
+
         # ==================================
         # GET USERS
         # ==================================
@@ -158,6 +160,7 @@ def register_payment(bot):
         user_2_id = active_deal["user_2_id"]
 
         try:
+
             user_1 = bot.get_chat(user_1_id)
             user_2 = bot.get_chat(user_2_id)
 
@@ -203,16 +206,19 @@ def register_payment(bot):
         )
 
         # ==================================
-        # PIN MESSAGE 1
+        # PIN MESSAGE 1 ONLY
         # ==================================
 
         try:
+
             bot.pin_chat_message(
                 message.chat.id,
                 payment_message.message_id,
                 disable_notification=True
             )
+
         except Exception as error:
+
             print(
                 f"Payment pin error: {error}"
             )
@@ -220,35 +226,22 @@ def register_payment(bot):
         # ==================================
         # MESSAGE 2
         # ==================================
+        # Message rahega, PIN nahi hoga.
 
         voucher_format_message = bot.send_message(
-    message.chat.id,
-    (
-        "🧾 <b>VOUCHER FORMAT</b>\n\n"
-        f"<code>I vouch @RounakMM for MM'D "
-        f"{amount_text}</code>"
-    ),
-    parse_mode="HTML"
-)
-
-        # ==================================
-        # PIN MESSAGE 2
-        # ==================================
-
-        try:
-            bot.pin_chat_message(
-                message.chat.id,
-                voucher_format_message.message_id,
-                disable_notification=True
-            )
-        except Exception as error:
-            print(
-                f"Voucher format pin error: {error}"
-            )
+            message.chat.id,
+            (
+                "🧾 <b>VOUCHER FORMAT</b>\n\n"
+                f"<code>I vouch @RounakMM for MM'D "
+                f"{amount_text}</code>"
+            ),
+            parse_mode="HTML"
+        )
 
         # ==================================
         # MESSAGE 3
         # ==================================
+        # Message rahega, PIN nahi hoga.
 
         reminder_message = bot.send_message(
             message.chat.id,
@@ -259,18 +252,3 @@ def register_payment(bot):
             ),
             parse_mode="HTML"
         )
-
-        # ==================================
-        # PIN MESSAGE 3
-        # ==================================
-
-        try:
-            bot.pin_chat_message(
-                message.chat.id,
-                reminder_message.message_id,
-                disable_notification=True
-            )
-        except Exception as error:
-            print(
-                f"Reminder pin error: {error}"
-      )
