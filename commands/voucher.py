@@ -1,5 +1,10 @@
 from config import MM_CHAT_IDS, ADMIN_IDS
 
+from commands.command_utils import (
+    normalize_command,
+    delete_command_message
+)
+
 
 # ==========================================
 # REGISTER VOUCHER
@@ -10,9 +15,19 @@ def register_voucher(bot):
     @bot.message_handler(
         func=lambda message:
         message.text
-        and message.text.strip().lower().startswith(".voucher")
+        and normalize_command(message.text)
+        .lower()
+        .startswith(".voucher")
     )
     def voucher_command(message):
+
+        # ==================================
+        # NORMALIZE COMMAND
+        # ==================================
+
+        command_text = normalize_command(
+            message.text
+        )
 
         # ==================================
         # MM ONLY
@@ -21,6 +36,7 @@ def register_voucher(bot):
         if message.from_user.id not in MM_CHAT_IDS:
 
             if message.from_user.id in ADMIN_IDS:
+
                 bot.reply_to(
                     message,
                     "⚠️ Sirf MM ye command use kar sakta hai."
@@ -42,7 +58,7 @@ def register_voucher(bot):
         # GET AMOUNT
         # ==================================
 
-        parts = message.text.strip().split()
+        parts = command_text.strip().split()
 
         if len(parts) != 2:
 
@@ -54,6 +70,12 @@ def register_voucher(bot):
                     "<code>.voucher 500</code>"
                 ),
                 parse_mode="HTML"
+            )
+
+            # Delete command
+            delete_command_message(
+                bot,
+                message
             )
 
             return
@@ -70,13 +92,22 @@ def register_voucher(bot):
         # ==================================
 
         try:
-            amount = float(raw_amount)
+
+            amount = float(
+                raw_amount
+            )
 
         except ValueError:
 
             bot.reply_to(
                 message,
                 "⚠️ Amount valid number hona chahiye."
+            )
+
+            # Delete command
+            delete_command_message(
+                bot,
+                message
             )
 
             return
@@ -86,6 +117,12 @@ def register_voucher(bot):
             bot.reply_to(
                 message,
                 "⚠️ Amount 0 se greater hona chahiye."
+            )
+
+            # Delete command
+            delete_command_message(
+                bot,
+                message
             )
 
             return
@@ -107,4 +144,13 @@ def register_voucher(bot):
                 f"for MM'D {amount_text}</code>"
             ),
             parse_mode="HTML"
+        )
+
+        # ==================================
+        # DELETE COMMAND MESSAGE
+        # ==================================
+
+        delete_command_message(
+            bot,
+            message
         )
