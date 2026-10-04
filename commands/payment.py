@@ -7,7 +7,7 @@ from database.database import (
 )
 
 from commands.command_utils import (
-    normalize_dot_command,
+    normalize_command,
     delete_command_message
 )
 
@@ -36,7 +36,9 @@ def register_payment(bot):
     @bot.message_handler(
         func=lambda message:
         message.text
-        and normalize_dot_command(message.text).startswith(".payment")
+        and normalize_command(
+            message.text
+        ).lower().startswith(".payment")
     )
     def payment_command(message):
 
@@ -47,6 +49,7 @@ def register_payment(bot):
         if message.from_user.id not in MM_CHAT_IDS:
 
             if message.from_user.id in ADMIN_IDS:
+
                 bot.reply_to(
                     message,
                     "⚠️ Sirf MM ye command use kar sakta hai."
@@ -71,8 +74,9 @@ def register_payment(bot):
         # Supports:
         # .payment 500
         # . payment 500
+        # .   payment 500
 
-        command_text = normalize_dot_command(
+        command_text = normalize_command(
             message.text
         )
 
@@ -89,6 +93,11 @@ def register_payment(bot):
             bot.reply_to(
                 message,
                 "⚠️ Is group mein koi active deal nahi hai."
+            )
+
+            delete_command_message(
+                bot,
+                message
             )
 
             return
@@ -113,6 +122,11 @@ def register_payment(bot):
                 parse_mode="HTML"
             )
 
+            delete_command_message(
+                bot,
+                message
+            )
+
             return
 
         raw_amount = parts[1].strip()
@@ -124,10 +138,12 @@ def register_payment(bot):
         currency = "₹"
 
         if raw_amount.startswith("$"):
+
             currency = "$"
             raw_amount = raw_amount[1:]
 
         elif raw_amount.startswith("₹"):
+
             currency = "₹"
             raw_amount = raw_amount[1:]
 
@@ -136,13 +152,21 @@ def register_payment(bot):
         # ==================================
 
         try:
-            amount = float(raw_amount)
+
+            amount = float(
+                raw_amount
+            )
 
         except ValueError:
 
             bot.reply_to(
                 message,
                 "⚠️ Amount valid number hona chahiye."
+            )
+
+            delete_command_message(
+                bot,
+                message
             )
 
             return
@@ -152,6 +176,11 @@ def register_payment(bot):
             bot.reply_to(
                 message,
                 "⚠️ Amount 0 se greater hona chahiye."
+            )
+
+            delete_command_message(
+                bot,
+                message
             )
 
             return
@@ -170,15 +199,6 @@ def register_payment(bot):
         )
 
         # ==================================
-        # DELETE COMMAND
-        # ==================================
-
-        delete_command_message(
-            bot,
-            message
-        )
-
-        # ==================================
         # GET USERS
         # ==================================
 
@@ -187,8 +207,13 @@ def register_payment(bot):
 
         try:
 
-            user_1 = bot.get_chat(user_1_id)
-            user_2 = bot.get_chat(user_2_id)
+            user_1 = bot.get_chat(
+                user_1_id
+            )
+
+            user_2 = bot.get_chat(
+                user_2_id
+            )
 
             user_1_name = (
                 user_1.first_name
@@ -200,7 +225,11 @@ def register_payment(bot):
                 or "User 2"
             )
 
-        except Exception:
+        except Exception as error:
+
+            print(
+                f"Payment user lookup error: {error}"
+            )
 
             user_1_name = "User 1"
             user_2_name = "User 2"
@@ -215,7 +244,9 @@ def register_payment(bot):
             user_2_name
         )
 
-        amount_text = f"{currency}{amount:g}"
+        amount_text = (
+            f"{currency}{amount:g}"
+        )
 
         # ==================================
         # MESSAGE 1
@@ -256,8 +287,8 @@ def register_payment(bot):
         bot.send_message(
             message.chat.id,
             (
-                f"<code>I vouch @RounakMM for MM'D "
-                f"{amount_text}</code>"
+                f"<code>I vouch @RounakMM "
+                f"for MM'D {amount_text}</code>"
             ),
             parse_mode="HTML"
         )
@@ -270,8 +301,17 @@ def register_payment(bot):
             message.chat.id,
             (
                 f"{mention_1} {mention_2}\n\n"
-                f"📩 <b>Please drop voucher for "
-                f"{amount_text}.</b>"
+                f"📩 <b>Please drop voucher "
+                f"for {amount_text}.</b>"
             ),
             parse_mode="HTML"
+        )
+
+        # ==================================
+        # DELETE COMMAND MESSAGE
+        # ==================================
+
+        delete_command_message(
+            bot,
+            message
         )
