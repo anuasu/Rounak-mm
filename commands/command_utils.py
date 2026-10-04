@@ -2,14 +2,29 @@
 # COMMAND UTILS
 # ==========================================
 
+
 def normalize_command(text):
     """
-    Converts:
-    . payment  -> .payment
-    . deal     -> .deal
-    . hold     -> .hold
+    Normalizes dot commands.
 
-    Normal commands remain unchanged.
+    Examples:
+
+    .payment 500
+    -> .payment 500
+
+    . payment 500
+    -> .payment 500
+
+    .   payment 500
+    -> .payment 500
+
+    .deal
+    -> .deal
+
+    . deal
+    -> .deal
+
+    Normal text remains unchanged.
     """
 
     if not text:
@@ -17,11 +32,18 @@ def normalize_command(text):
 
     text = text.strip()
 
-    # Dot command ke baad extra spaces remove
-    if text.startswith("."):
+    # --------------------------------------
+    # ONLY DOT COMMANDS
+    # --------------------------------------
 
-        # "." ke baad ke spaces remove
-        text = "." + text[1:].lstrip()
+    if not text.startswith("."):
+        return text
+
+    # --------------------------------------
+    # REMOVE SPACES AFTER DOT
+    # --------------------------------------
+
+    text = "." + text[1:].lstrip()
 
     return text
 
@@ -32,10 +54,24 @@ def normalize_command(text):
 
 def get_command_name(text):
     """
-    Example:
-    .payment 500 -> payment
-    . payment 500 -> payment
-    .deal -> deal
+    Returns command name without dot.
+
+    Examples:
+
+    .payment 500
+    -> payment
+
+    . payment 500
+    -> payment
+
+    .   payment 500
+    -> payment
+
+    .deal
+    -> deal
+
+    Normal text
+    -> None
     """
 
     if not text:
@@ -51,7 +87,61 @@ def get_command_name(text):
     if not parts:
         return None
 
-    return parts[0][1:].lower()
+    command = parts[0]
+
+    if not command.startswith("."):
+        return None
+
+    return command[1:].lower()
+
+
+# ==========================================
+# GET NORMALIZED TEXT
+# ==========================================
+
+def get_normalized_text(text):
+    """
+    Returns the complete normalized command text.
+
+    Examples:
+
+    . payment 500
+    -> .payment 500
+
+    .   hold    100
+    -> .hold 100
+
+    .deal
+    -> .deal
+    """
+
+    return normalize_command(text)
+
+
+# ==========================================
+# CHECK DOT COMMAND
+# ==========================================
+
+def is_dot_command(text):
+    """
+    Checks whether the message is a dot command.
+
+    Examples:
+
+    .deal       -> True
+    . payment   -> True
+    .hold 100   -> True
+
+    hello       -> False
+    /admin      -> False
+    """
+
+    if not text:
+        return False
+
+    text = text.strip()
+
+    return text.startswith(".")
 
 
 # ==========================================
@@ -61,6 +151,11 @@ def get_command_name(text):
 def delete_command_message(bot, message):
     """
     Deletes the user's dot-command message.
+
+    Works only in groups/supergroups.
+
+    If Telegram doesn't allow deletion,
+    the error is safely ignored.
     """
 
     try:
@@ -68,11 +163,19 @@ def delete_command_message(bot, message):
         if not message:
             return
 
+        # ----------------------------------
+        # ONLY GROUP / SUPERGROUP
+        # ----------------------------------
+
         if message.chat.type not in [
             "group",
             "supergroup"
         ]:
             return
+
+        # ----------------------------------
+        # DELETE USER COMMAND
+        # ----------------------------------
 
         bot.delete_message(
             message.chat.id,
@@ -84,3 +187,71 @@ def delete_command_message(bot, message):
         print(
             f"⚠️ Command delete error: {error}"
         )
+
+
+# ==========================================
+# PROCESS DOT COMMAND
+# ==========================================
+
+def prepare_command(text):
+    """
+    Utility for command handlers.
+
+    Returns:
+
+    {
+        "is_command": True,
+        "command": "payment",
+        "text": ".payment 500",
+        "parts": [".payment", "500"]
+    }
+
+    For normal messages:
+
+    {
+        "is_command": False,
+        "command": None,
+        "text": original_text,
+        "parts": [...]
+    }
+    """
+
+    if not text:
+
+        return {
+            "is_command": False,
+            "command": None,
+            "text": text,
+            "parts": []
+        }
+
+    normalized = normalize_command(text)
+
+    if not normalized.startswith("."):
+
+        return {
+            "is_command": False,
+            "command": None,
+            "text": normalized,
+            "parts": normalized.split()
+        }
+
+    parts = normalized.split()
+
+    if not parts:
+
+        return {
+            "is_command": False,
+            "command": None,
+            "text": normalized,
+            "parts": []
+        }
+
+    command = parts[0][1:].lower()
+
+    return {
+        "is_command": True,
+        "command": command,
+        "text": normalized,
+        "parts": parts
+    }
