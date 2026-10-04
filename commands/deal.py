@@ -6,6 +6,12 @@ from database.database import (
     get_active_deal
 )
 
+from commands.command_utils import (
+    normalize_command,
+    delete_command_message
+)
+
+
 # ==========================================
 # TEMPORARY DEAL SETUP
 # group_chat_id -> first user
@@ -41,13 +47,13 @@ def get_replied_user(message):
 def register_deal(bot):
 
     # ======================================
-    # .deal
+    # .deal / . deal
     # ======================================
 
     @bot.message_handler(
         func=lambda message:
         message.text
-        and message.text.strip().lower() == ".deal"
+        and normalize_command(message.text).lower() == ".deal"
     )
     def deal_command(message):
 
@@ -77,6 +83,13 @@ def register_deal(bot):
                 message,
                 "❌ .deal sirf group mein use kar sakte ho."
             )
+
+            # Command delete
+            delete_command_message(
+                bot,
+                message
+            )
+
             return
 
         group_id = message.chat.id
@@ -97,13 +110,22 @@ def register_deal(bot):
                 ),
                 parse_mode="HTML"
             )
+
+            # Command delete
+            delete_command_message(
+                bot,
+                message
+            )
+
             return
 
         # ----------------------------------
-        # CHECK ALREADY COMPLETED/ACTIVE DEAL
+        # CHECK ALREADY ACTIVE DEAL
         # ----------------------------------
 
-        active_deal = get_active_deal(group_id)
+        active_deal = get_active_deal(
+            group_id
+        )
 
         if active_deal:
 
@@ -117,6 +139,13 @@ def register_deal(bot):
                 ),
                 parse_mode="HTML"
             )
+
+            # Command delete
+            delete_command_message(
+                bot,
+                message
+            )
+
             return
 
         # ----------------------------------
@@ -164,6 +193,12 @@ def register_deal(bot):
                 parse_mode="HTML"
             )
 
+            # Command delete
+            delete_command_message(
+                bot,
+                message
+            )
+
             return
 
         # ----------------------------------
@@ -185,6 +220,13 @@ def register_deal(bot):
                 message,
                 "⚠️ User 1 aur User 2 same nahi ho sakte."
             )
+
+            # Command delete
+            delete_command_message(
+                bot,
+                message
+            )
+
             return
 
         # ----------------------------------
@@ -263,3 +305,11 @@ def register_deal(bot):
             parse_mode="HTML"
         )
 
+        # ----------------------------------
+        # DELETE COMMAND
+        # ----------------------------------
+
+        delete_command_message(
+            bot,
+            message
+        )
