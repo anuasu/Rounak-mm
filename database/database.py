@@ -75,18 +75,16 @@ def init_database():
     """)
 
     # ======================================
-    # SAVE + CLOSE
+    # QR SETTINGS
     # ======================================
-    
-    
-    
-    cursor.execute("""
-    CREATE TABLE IF NOT EXISTS qr_settings (
-        qr_number INTEGER PRIMARY KEY,
-        image_file_id TEXT
-    )
-""")
 
+    cursor.execute("""
+        CREATE TABLE IF NOT EXISTS qr_settings (
+            qr_number INTEGER PRIMARY KEY,
+            image_file_id TEXT,
+            upi_id TEXT DEFAULT NULL
+        )
+    """)
 
     # ======================================
     # LEADERBOARD RESTORE STATS
@@ -108,6 +106,34 @@ def init_database():
         )
         VALUES (1, 0, 0)
     """)
+
+    # ======================================
+    # QR DATABASE MIGRATION
+    # ======================================
+
+    # Agar purane database mein qr_settings
+    # table already hai aur upi_id column nahi hai,
+    # to automatically column add ho jayega.
+
+    cursor.execute("""
+        PRAGMA table_info(qr_settings)
+    """)
+
+    columns = [
+        row["name"]
+        for row in cursor.fetchall()
+    ]
+
+    if "upi_id" not in columns:
+
+        cursor.execute("""
+            ALTER TABLE qr_settings
+            ADD COLUMN upi_id TEXT DEFAULT NULL
+        """)
+
+    # ======================================
+    # SAVE + CLOSE
+    # ======================================
 
     connection.commit()
     connection.close()
@@ -237,10 +263,6 @@ def complete_deal(deal_id):
 
     now = datetime.now().isoformat()
 
-    # --------------------------------------
-    # Deal information
-    # --------------------------------------
-
     cursor.execute("""
         SELECT *
         FROM deals
@@ -257,10 +279,6 @@ def complete_deal(deal_id):
         connection.close()
         return False
 
-    # --------------------------------------
-    # Mark completed
-    # --------------------------------------
-
     cursor.execute("""
         UPDATE deals
         SET
@@ -271,11 +289,6 @@ def complete_deal(deal_id):
         now,
         deal_id
     ))
-    
-    
-    # --------------------------------------
-    # UPDATE RAUNAK MM STATS
-    # --------------------------------------
 
     cursor.execute("""
         UPDATE leaderboard_stats
@@ -285,11 +298,7 @@ def complete_deal(deal_id):
         WHERE id = 1
     """, (
         deal["deal_amount"],
-    ))    
-
-    # --------------------------------------
-    # User 1 update
-    # --------------------------------------
+    ))
 
     cursor.execute("""
         UPDATE users
@@ -303,10 +312,6 @@ def complete_deal(deal_id):
         now,
         deal["user_1_id"]
     ))
-
-    # --------------------------------------
-    # User 2 update
-    # --------------------------------------
 
     cursor.execute("""
         UPDATE users
@@ -456,8 +461,8 @@ def update_payment(deal_id, amount):
 
     connection.commit()
     connection.close()
-    
-    
+
+
 # ==========================================
 # RAUNAK MM TOTAL STATS
 # ==========================================
@@ -480,8 +485,8 @@ def get_mm_stats():
     connection.close()
 
     return stats
-    
-    
+
+
 # ==========================================
 # SEARCH USER
 # ==========================================
@@ -507,8 +512,8 @@ def search_user(chat_id):
     connection.close()
 
     return user
-    
-    
+
+
 # ==========================================
 # GET ACTIVE DEAL FOR GROUP
 # ==========================================
@@ -531,7 +536,7 @@ def get_active_deal(group_chat_id):
 
     connection.close()
 
-    return deal    
+    return deal
 
 
 # ==========================================
@@ -569,6 +574,7 @@ def remove_deal(group_chat_id):
     connection.close()
 
     return deal_id
+
 
 # ==========================================
 # GET MM FEE IMAGE
@@ -620,7 +626,12 @@ def set_mm_fee_image(image_file_id):
 
     connection.commit()
     connection.close()
-    
+
+
+# ==========================================
+# SET QR IMAGE
+# ==========================================
+
 def set_qr(qr_number, image_file_id):
 
     connection = get_connection()
@@ -644,6 +655,10 @@ def set_qr(qr_number, image_file_id):
     connection.commit()
     connection.close()
 
+
+# ==========================================
+# GET QR IMAGE
+# ==========================================
 
 def get_qr(qr_number):
 
@@ -669,6 +684,124 @@ def get_qr(qr_number):
 
 
 # ==========================================
+# SET QR UPI
+# ==========================================
+
+def set_qr_upi(qr_number, upi_id):
+
+    connection = get_connection()
+    cursor = connection.cursor()
+
+    cursor.execute("""
+        INSERT INTO qr_settings (
+            qr_number,
+            image_file_id,
+            upi_id
+        )
+        VALUES (?, NULL, ?)
+
+        ON CONFLICT(qr_number)
+        DO UPDATE SET
+            upi_id = excluded.upi_id
+    """, (
+        qr_number,
+        upi_id
+    ))
+
+    connection.commit()
+    connection.close()
+
+
+# ==========================================
+# GET QR UPI
+# ==========================================
+
+def get_qr_upi(qr_number):
+
+    connection = get_connection()
+    cursor = connection.cursor()
+
+    cursor.execute("""
+        SELECT upi_id
+        FROM qr_settings
+        WHERE qr_number = ?
+    """, (
+        qr_number,
+    ))
+
+    result = cursor.fetchone()
+
+    connection.close()
+
+    if result:
+        return result["upi_id"]
+
+    return None
+
+
+# ==========================================
+# SET QR IMAGE + UPI TOGETHER
+# ==========================================
+
+def set_qr_details(
+    qr_number,
+    image_file_id,
+    upi_id=None
+):
+
+    connection = get_connection()
+    cursor = connection.cursor()
+
+    cursor.execute("""
+        INSERT INTO qr_settings (
+            qr_number,
+            image_file_id,
+            upi_id
+        )
+        VALUES (?, ?, ?)
+
+        ON CONFLICT(qr_number)
+        DO UPDATE SET
+            image_file_id = excluded.image_file_id,
+            upi_id = excluded.upi_id
+    """, (
+        qr_number,
+        image_file_id,
+        upi_id
+    ))
+
+    connection.commit()
+    connection.close()
+
+
+# ==========================================
+# GET COMPLETE QR DETAILS
+# ==========================================
+
+def get_qr_details(qr_number):
+
+    connection = get_connection()
+    cursor = connection.cursor()
+
+    cursor.execute("""
+        SELECT
+            qr_number,
+            image_file_id,
+            upi_id
+        FROM qr_settings
+        WHERE qr_number = ?
+    """, (
+        qr_number,
+    ))
+
+    result = cursor.fetchone()
+
+    connection.close()
+
+    return result
+
+
+# ==========================================
 # GET BACKUP DATA
 # ==========================================
 
@@ -676,10 +809,6 @@ def get_backup_data():
 
     connection = get_connection()
     cursor = connection.cursor()
-
-    # --------------------------------------
-    # RAUNAK MM TOTAL STATS
-    # --------------------------------------
 
     cursor.execute("""
         SELECT
@@ -690,10 +819,6 @@ def get_backup_data():
     """)
 
     mm_stats = cursor.fetchone()
-
-    # --------------------------------------
-    # USER LEADERBOARD DATA
-    # --------------------------------------
 
     cursor.execute("""
         SELECT
@@ -725,10 +850,6 @@ def get_backup_data():
 
     connection.close()
 
-    # --------------------------------------
-    # FINAL BACKUP DATA
-    # --------------------------------------
-
     return {
         "raunak_mm": {
             "total_deals": mm_stats["total_deals"] or 0,
@@ -737,7 +858,6 @@ def get_backup_data():
 
         "users": user_data
     }
-
 
 
 # ==========================================
