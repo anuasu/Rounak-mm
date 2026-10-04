@@ -1,5 +1,10 @@
 from config import MM_CHAT_IDS, ADMIN_IDS
 
+from commands.command_utils import (
+    normalize_command,
+    delete_command_message
+)
+
 
 # ==========================================
 # REGISTER FORM
@@ -10,9 +15,19 @@ def register_form(bot):
     @bot.message_handler(
         func=lambda message:
         message.text
-        and message.text.strip().lower() == ".form"
+        and normalize_command(message.text)
+        .lower()
+        == ".form"
     )
     def form_command(message):
+
+        # ==================================
+        # NORMALIZE COMMAND
+        # ==================================
+
+        command_text = normalize_command(
+            message.text
+        )
 
         # ==================================
         # MM ONLY
@@ -21,6 +36,7 @@ def register_form(bot):
         if message.from_user.id not in MM_CHAT_IDS:
 
             if message.from_user.id in ADMIN_IDS:
+
                 bot.reply_to(
                     message,
                     "⚠️ Sirf MM ye command use kar sakta hai."
@@ -64,4 +80,13 @@ def register_form(bot):
             message.chat.id,
             form_text,
             parse_mode="HTML"
+        )
+
+        # ==================================
+        # DELETE COMMAND MESSAGE
+        # ==================================
+
+        delete_command_message(
+            bot,
+            message
         )
