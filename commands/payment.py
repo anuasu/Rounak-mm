@@ -6,6 +6,11 @@ from database.database import (
     complete_deal
 )
 
+from commands.command_utils import (
+    normalize_dot_command,
+    delete_command_message
+)
+
 
 # ==========================================
 # FORMAT USER MENTION
@@ -31,7 +36,7 @@ def register_payment(bot):
     @bot.message_handler(
         func=lambda message:
         message.text
-        and message.text.strip().lower().startswith(".payment")
+        and normalize_dot_command(message.text).startswith(".payment")
     )
     def payment_command(message):
 
@@ -60,6 +65,18 @@ def register_payment(bot):
             return
 
         # ==================================
+        # NORMALIZE COMMAND
+        # ==================================
+
+        # Supports:
+        # .payment 500
+        # . payment 500
+
+        command_text = normalize_dot_command(
+            message.text
+        )
+
+        # ==================================
         # GET ACTIVE DEAL
         # ==================================
 
@@ -80,7 +97,7 @@ def register_payment(bot):
         # GET PAYMENT TEXT
         # ==================================
 
-        parts = message.text.strip().split()
+        parts = command_text.split()
 
         if len(parts) != 2:
 
@@ -150,6 +167,15 @@ def register_payment(bot):
 
         complete_deal(
             active_deal["deal_id"]
+        )
+
+        # ==================================
+        # DELETE COMMAND
+        # ==================================
+
+        delete_command_message(
+            bot,
+            message
         )
 
         # ==================================
@@ -226,9 +252,8 @@ def register_payment(bot):
         # ==================================
         # MESSAGE 2
         # ==================================
-        # Message rahega, PIN nahi hoga.
 
-        voucher_format_message = bot.send_message(
+        bot.send_message(
             message.chat.id,
             (
                 f"<code>I vouch @RounakMM for MM'D "
@@ -240,9 +265,8 @@ def register_payment(bot):
         # ==================================
         # MESSAGE 3
         # ==================================
-        # Message rahega, PIN nahi hoga.
 
-        reminder_message = bot.send_message(
+        bot.send_message(
             message.chat.id,
             (
                 f"{mention_1} {mention_2}\n\n"
