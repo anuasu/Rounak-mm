@@ -964,3 +964,46 @@ def restore_backup_data(backup_data):
     finally:
 
         connection.close()
+
+
+    # ==========================================
+# TOTAL USERS
+# ==========================================
+
+def get_total_users():
+
+    connection = get_connection()
+    cursor = connection.cursor()
+
+    cursor.execute("""
+        SELECT COUNT(*)
+        FROM users
+    """)
+
+    total = cursor.fetchone()[0]
+
+    connection.close()
+
+    return total
+
+
+# ==========================================
+# ACTIVE USERS — LAST 30 DAYS
+# ==========================================
+
+def get_active_users():
+
+    connection = get_connection()
+    cursor = connection.cursor()
+
+    cursor.execute("""
+        SELECT COUNT(*)
+        FROM users
+        WHERE updated_at >= datetime('now', '-30 days')
+    """)
+
+    active = cursor.fetchone()[0]
+
+    connection.close()
+
+    return active
