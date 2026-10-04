@@ -3,28 +3,30 @@
 # ==========================================
 
 
-def normalize_command(text):
+def normalize_dot_command(text):
     """
-    Normalizes dot commands.
+    Normalize dot commands.
 
-    Examples:
-
+    Supports:
     .payment 500
-    -> .payment 500
-
     . payment 500
-    -> .payment 500
-
-    .   payment 500
-    -> .payment 500
 
     .deal
-    -> .deal
-
     . deal
-    -> .deal
 
-    Normal text remains unchanged.
+    .hold 100
+    . hold 100
+
+    .voucher 500
+    . voucher 500
+
+    .form
+    . form
+
+    .QR 500
+    . QR 500
+
+    Normal non-dot messages remain unchanged.
     """
 
     if not text:
@@ -33,19 +35,37 @@ def normalize_command(text):
     text = text.strip()
 
     # --------------------------------------
-    # ONLY DOT COMMANDS
+    # DOT COMMAND
     # --------------------------------------
 
-    if not text.startswith("."):
-        return text
+    if text.startswith("."):
 
-    # --------------------------------------
-    # REMOVE SPACES AFTER DOT
-    # --------------------------------------
+        # Dot ke baad jitne bhi spaces hain
+        # unko remove kar do.
+        #
+        # ". payment 500"
+        # becomes
+        # ".payment 500"
 
-    text = "." + text[1:].lstrip()
+        text = "." + text[1:].lstrip()
 
     return text
+
+
+# ==========================================
+# BACKWARD COMPATIBILITY
+# ==========================================
+
+def normalize_command(text):
+    """
+    Old function name support.
+
+    Agar kisi purani command file mein
+    normalize_command() use ho raha hai,
+    to woh bhi properly kaam karega.
+    """
+
+    return normalize_dot_command(text)
 
 
 # ==========================================
@@ -54,8 +74,6 @@ def normalize_command(text):
 
 def get_command_name(text):
     """
-    Returns command name without dot.
-
     Examples:
 
     .payment 500
@@ -64,20 +82,17 @@ def get_command_name(text):
     . payment 500
     -> payment
 
-    .   payment 500
-    -> payment
-
     .deal
     -> deal
 
-    Normal text
-    -> None
+    . deal
+    -> deal
     """
 
     if not text:
         return None
 
-    text = normalize_command(text)
+    text = normalize_dot_command(text)
 
     if not text.startswith("."):
         return None
@@ -87,61 +102,7 @@ def get_command_name(text):
     if not parts:
         return None
 
-    command = parts[0]
-
-    if not command.startswith("."):
-        return None
-
-    return command[1:].lower()
-
-
-# ==========================================
-# GET NORMALIZED TEXT
-# ==========================================
-
-def get_normalized_text(text):
-    """
-    Returns the complete normalized command text.
-
-    Examples:
-
-    . payment 500
-    -> .payment 500
-
-    .   hold    100
-    -> .hold 100
-
-    .deal
-    -> .deal
-    """
-
-    return normalize_command(text)
-
-
-# ==========================================
-# CHECK DOT COMMAND
-# ==========================================
-
-def is_dot_command(text):
-    """
-    Checks whether the message is a dot command.
-
-    Examples:
-
-    .deal       -> True
-    . payment   -> True
-    .hold 100   -> True
-
-    hello       -> False
-    /admin      -> False
-    """
-
-    if not text:
-        return False
-
-    text = text.strip()
-
-    return text.startswith(".")
+    return parts[0][1:].lower()
 
 
 # ==========================================
@@ -150,12 +111,8 @@ def is_dot_command(text):
 
 def delete_command_message(bot, message):
     """
-    Deletes the user's dot-command message.
-
-    Works only in groups/supergroups.
-
-    If Telegram doesn't allow deletion,
-    the error is safely ignored.
+    Deletes user's dot-command message
+    after the command is processed.
     """
 
     try:
@@ -163,19 +120,13 @@ def delete_command_message(bot, message):
         if not message:
             return
 
-        # ----------------------------------
-        # ONLY GROUP / SUPERGROUP
-        # ----------------------------------
-
+        # Sirf groups/supergroups mein
+        # command delete karega.
         if message.chat.type not in [
             "group",
             "supergroup"
         ]:
             return
-
-        # ----------------------------------
-        # DELETE USER COMMAND
-        # ----------------------------------
 
         bot.delete_message(
             message.chat.id,
@@ -184,74 +135,8 @@ def delete_command_message(bot, message):
 
     except Exception as error:
 
+        # Bot ke paas delete permission na ho
+        # to bot crash nahi karega.
         print(
             f"⚠️ Command delete error: {error}"
         )
-
-
-# ==========================================
-# PROCESS DOT COMMAND
-# ==========================================
-
-def prepare_command(text):
-    """
-    Utility for command handlers.
-
-    Returns:
-
-    {
-        "is_command": True,
-        "command": "payment",
-        "text": ".payment 500",
-        "parts": [".payment", "500"]
-    }
-
-    For normal messages:
-
-    {
-        "is_command": False,
-        "command": None,
-        "text": original_text,
-        "parts": [...]
-    }
-    """
-
-    if not text:
-
-        return {
-            "is_command": False,
-            "command": None,
-            "text": text,
-            "parts": []
-        }
-
-    normalized = normalize_command(text)
-
-    if not normalized.startswith("."):
-
-        return {
-            "is_command": False,
-            "command": None,
-            "text": normalized,
-            "parts": normalized.split()
-        }
-
-    parts = normalized.split()
-
-    if not parts:
-
-        return {
-            "is_command": False,
-            "command": None,
-            "text": normalized,
-            "parts": []
-        }
-
-    command = parts[0][1:].lower()
-
-    return {
-        "is_command": True,
-        "command": command,
-        "text": normalized,
-        "parts": parts
-    }
