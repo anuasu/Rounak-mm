@@ -91,7 +91,7 @@ def register_qr(bot):
             return
 
         # ----------------------------------
-        # CHECK QR NUMBER
+        # QR NUMBER
         # ----------------------------------
 
         parts = message.text.strip().split()
@@ -113,6 +113,7 @@ def register_qr(bot):
             return
 
         try:
+
             qr_number = int(parts[1])
 
         except ValueError:
@@ -134,10 +135,10 @@ def register_qr(bot):
             return
 
         # ----------------------------------
-        # ASK FOR QR IMAGE
+        # ASK QR IMAGE
         # ----------------------------------
 
-        ask_message = bot.reply_to(
+        bot.reply_to(
             message,
             (
                 f"📱 <b>SET QR {qr_number}</b>\n\n"
@@ -147,150 +148,163 @@ def register_qr(bot):
         )
 
         # ----------------------------------
-        # WAIT FOR QR IMAGE
+        # WAIT FOR PHOTO
         # ----------------------------------
 
-        def receive_qr_image(reply):
-
-            if reply.from_user.id != message.from_user.id:
-                return
-
-            if reply.chat.id != message.chat.id:
-                return
-
-            if not reply.photo:
-
-                bot.reply_to(
-                    reply,
-                    "⚠️ Please send a QR image."
-                )
-
-                return
-
-            image_file_id = reply.photo[-1].file_id
-
-            # ----------------------------------
-            # SAVE QR
-            # ----------------------------------
-
-            set_qr(
-                qr_number,
-                image_file_id
-            )
-
-            # ----------------------------------
-            # ASK UPI
-            # ----------------------------------
-
-            markup = types.InlineKeyboardMarkup()
-
-            no_upi_button = types.InlineKeyboardButton(
-                "❌ No, I can't add ID",
-                callback_data=f"qr_no_upi:{qr_number}:{message.from_user.id}"
-            )
-
-            markup.add(no_upi_button)
-
-            bot.send_message(
-                message.chat.id,
-                (
-                    f"✅ <b>QR {qr_number} saved!</b>\n\n"
-                    "Please share your <b>UPI ID</b>.\n\n"
-                    "Example:\n"
-                    "<code>yourname@upi</code>\n\n"
-                    "Or tap the button below if you don't want "
-                    "to add a UPI ID."
-                ),
-                parse_mode="HTML",
-                reply_markup=markup
-            )
-
-            # Stop this temporary handler
-            bot.remove_message_handler(
-                receive_qr_image
-            )
-
-            # Install UPI listener
-            install_upi_listener(
-                qr_number,
-                message.from_user.id,
-                message.chat.id
-            )
-
-        bot.register_message_handler(
+        bot.register_next_step_handler(
+            message,
             receive_qr_image,
-            content_types=["photo"],
-            func=lambda msg:
-                msg.from_user
-                and msg.from_user.id == message.from_user.id
-                and msg.chat.id == message.chat.id
+            qr_number
         )
 
 
     # ======================================
-    # UPI LISTENER
+    # RECEIVE QR IMAGE
     # ======================================
 
-    def install_upi_listener(
-        qr_number,
-        user_id,
-        chat_id
-    ):
+    def receive_qr_image(message, qr_number):
 
-        def receive_upi(message):
+        if message.from_user.id not in MM_CHAT_IDS + ADMIN_IDS:
+            return
 
-            if not message.from_user:
-                return
-
-            if message.from_user.id != user_id:
-                return
-
-            if message.chat.id != chat_id:
-                return
-
-            if not message.text:
-                return
-
-            upi_id = message.text.strip()
-
-            if not upi_id:
-                return
-
-            # ----------------------------------
-            # SAVE UPI
-            # ----------------------------------
-
-            set_qr_upi(
-                qr_number,
-                upi_id
-            )
+        if not message.photo:
 
             bot.send_message(
-                chat_id,
-                (
-                    f"✅ <b>QR {qr_number} UPDATED</b>\n\n"
-                    "📱 QR: <b>Saved</b>\n"
-                    "💳 UPI: "
-                    f"<code>{upi_id}</code>\n\n"
-                    f"Use <code>.qr{qr_number} amount</code> "
-                    "in your deal."
-                ),
-                parse_mode="HTML"
+                message.chat.id,
+                "⚠️ Please send a QR image."
             )
 
-            bot.remove_message_handler(
-                receive_upi
+            bot.register_next_step_handler(
+                message,
+                receive_qr_image,
+                qr_number
             )
 
-        bot.register_message_handler(
+            return
+
+        # ----------------------------------
+        # GET FILE ID
+        # ----------------------------------
+
+        image_file_id = message.photo[-1].file_id
+
+        # ----------------------------------
+        # SAVE QR
+        # ----------------------------------
+
+        set_qr(
+            qr_number,
+            image_file_id
+        )
+
+        # ----------------------------------
+        # ASK UPI
+        # ----------------------------------
+
+        markup = types.InlineKeyboardMarkup()
+
+        no_upi_button = types.InlineKeyboardButton(
+            "❌ No, I can't add ID",
+            callback_data=f"qr_no_upi:{qr_number}:{message.from_user.id}"
+        )
+
+        markup.add(no_upi_button)
+
+        bot.send_message(
+            message.chat.id,
+            (
+                f"✅ <b>QR {qr_number} saved!</b>\n\n"
+                "Please share your <b>UPI ID</b>.\n\n"
+                "Example:\n"
+                "<code>yourname@upi</code>\n\n"
+                "Or tap the button below if you don't want "
+                "to add a UPI ID."
+            ),
+            parse_mode="HTML",
+            reply_markup=markup
+        )
+
+        # ----------------------------------
+        # NEXT MESSAGE = UPI
+        # ----------------------------------
+
+        bot.register_next_step_handler(
+            message,
             receive_upi,
-            content_types=["text"],
-            func=lambda msg:
-                msg.from_user
-                and msg.from_user.id == user_id
-                and msg.chat.id == chat_id
-                and msg.text
-                and not msg.text.startswith("/")
+            qr_number
+        )
+
+
+    # ======================================
+    # RECEIVE UPI
+    # ======================================
+
+    def receive_upi(message, qr_number):
+
+        # ----------------------------------
+        # BUTTON / NON TEXT
+        # ----------------------------------
+
+        if not message.text:
+
+            bot.send_message(
+                message.chat.id,
+                "⚠️ Please send your UPI ID as text."
+            )
+
+            bot.register_next_step_handler(
+                message,
+                receive_upi,
+                qr_number
+            )
+
+            return
+
+        upi_id = message.text.strip()
+
+        # ----------------------------------
+        # EMPTY
+        # ----------------------------------
+
+        if not upi_id:
+
+            bot.send_message(
+                message.chat.id,
+                "⚠️ Please send a valid UPI ID."
+            )
+
+            bot.register_next_step_handler(
+                message,
+                receive_upi,
+                qr_number
+            )
+
+            return
+
+        # ----------------------------------
+        # SAVE UPI
+        # ----------------------------------
+
+        set_qr_upi(
+            qr_number,
+            upi_id
+        )
+
+        # ----------------------------------
+        # SUCCESS
+        # ----------------------------------
+
+        bot.send_message(
+            message.chat.id,
+            (
+                f"✅ <b>QR {qr_number} UPDATED</b>\n\n"
+                "📱 QR: <b>Saved</b>\n"
+                "💳 UPI ID:\n"
+                f"<code>{upi_id}</code>\n\n"
+                f"Use <code>.qr{qr_number} amount</code> "
+                "in your deal."
+            ),
+            parse_mode="HTML"
         )
 
 
@@ -300,7 +314,7 @@ def register_qr(bot):
 
     @bot.callback_query_handler(
         func=lambda call:
-            call.data.startswith("qr_no_upi:")
+        call.data.startswith("qr_no_upi:")
     )
     def no_upi_callback(call):
 
@@ -328,7 +342,7 @@ def register_qr(bot):
 
             bot.answer_callback_query(
                 call.id,
-                "⚠️ Sirf jisne QR set kiya hai wahi use kar sakta hai."
+                "⚠️ Sirf QR set karne wala user use kar sakta hai."
             )
 
             return
@@ -346,6 +360,10 @@ def register_qr(bot):
             call.id,
             "No UPI saved."
         )
+
+        # ----------------------------------
+        # UPDATE MESSAGE
+        # ----------------------------------
 
         try:
 
@@ -375,8 +393,8 @@ def register_qr(bot):
 
     @bot.message_handler(
         func=lambda message:
-            message.text
-            and message.text.strip().lower().startswith(".qr")
+        message.text
+        and message.text.strip().lower().startswith(".qr")
     )
     def qr_payment_command(message):
 
@@ -494,7 +512,7 @@ def register_qr(bot):
         total = amount + fee
 
         # ----------------------------------
-        # GET ACTIVE DEAL
+        # ACTIVE DEAL
         # ----------------------------------
 
         active_deal = get_active_deal(
@@ -511,7 +529,7 @@ def register_qr(bot):
             return
 
         # ----------------------------------
-        # GET QR IMAGE
+        # QR IMAGE
         # ----------------------------------
 
         image_file_id = get_qr(
@@ -533,15 +551,31 @@ def register_qr(bot):
             return
 
         # ----------------------------------
-        # GET UPI
+        # UPI
         # ----------------------------------
 
         upi_id = get_qr_upi(
             qr_number
         )
 
+        if upi_id:
+
+            upi_text = (
+                "\n\n"
+                "💳 <b>UPI ID</b>\n"
+                f"<code>{upi_id}</code>"
+            )
+
+        else:
+
+            upi_text = (
+                "\n\n"
+                "💳 <b>UPI ID</b>\n"
+                "<code>No UPI added here</code>"
+            )
+
         # ----------------------------------
-        # GET DEAL USERS
+        # USERS
         # ----------------------------------
 
         user_1_id = active_deal["user_1_id"]
@@ -587,7 +621,7 @@ def register_qr(bot):
         )
 
         # ----------------------------------
-        # FORMAT AMOUNTS
+        # AMOUNT TEXT
         # ----------------------------------
 
         amount_text = f"₹{amount:g}"
@@ -595,27 +629,7 @@ def register_qr(bot):
         total_text = f"₹{total:g}"
 
         # ----------------------------------
-        # UPI TEXT
-        # ----------------------------------
-
-        if upi_id:
-
-            upi_text = (
-                "\n\n"
-                "💳 <b>UPI ID</b>\n"
-                f"<code>{upi_id}</code>"
-            )
-
-        else:
-
-            upi_text = (
-                "\n\n"
-                "💳 <b>UPI ID</b>\n"
-                "<code>No UPI added here</code>"
-            )
-
-        # ----------------------------------
-        # QR CAPTION
+        # CAPTION
         # ----------------------------------
 
         caption = (
