@@ -12,35 +12,36 @@ from database.database import (
 
 def calculate_mm_fee(amount):
 
-    if 10 <= amount <= 50:
+    if 10 <= amount <= 49:
         return 10
 
-    elif 51 <= amount <= 350:
+    elif 50 <= amount <= 349:
         return 20
 
-    elif 351 <= amount <= 500:
+    elif 350 <= amount <= 499:
         return 30
 
-    elif 501 <= amount <= 700:
+    elif 500 <= amount <= 699:
         return 40
 
-    elif 701 <= amount <= 1000:
+    elif 700 <= amount <= 999:
         return 50
 
-    elif 1001 <= amount <= 1500:
+    elif 1000 <= amount <= 1499:
         return 80
 
-    elif 1501 <= amount <= 2000:
+    elif 1500 <= amount <= 1999:
         return 100
 
-    elif 2001 <= amount <= 2500:
+    elif 2000 <= amount <= 2499:
         return 130
 
-    elif 2501 <= amount <= 3000:
+    elif 2500 <= amount <= 2999:
         return 160
 
-    elif amount > 3000:
-        extra_slabs = int((amount - 3001) // 500)
+    elif amount >= 3000:
+    # 3000+ ke liye next slabs
+        extra_slabs = int((amount - 3000) // 500)
         return 190 + (extra_slabs * 30)
 
     return None
