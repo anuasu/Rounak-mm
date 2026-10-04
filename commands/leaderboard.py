@@ -3,7 +3,9 @@ from telebot import types
 from database.database import (
     get_leaderboard,
     get_total_user_deals,
-    get_mm_stats
+    get_mm_stats,
+    get_total_users,
+    get_active_users
 )
 
 
@@ -17,6 +19,9 @@ def build_leaderboard():
     total_user_deals = get_total_user_deals()
     mm_stats = get_mm_stats()
 
+    total_users = get_total_users()
+    active_users = get_active_users()
+
     mm_total_deals = mm_stats["total_deals"] or 0
     mm_total_amount = mm_stats["total_amount"] or 0
 
@@ -29,11 +34,21 @@ def build_leaderboard():
 
         "━━━━━━━━━━━━━━━━━━\n\n"
 
-        f"👥 Total User Deals: <b>{total_user_deals}</b>\n\n"
+        "👥 <b>COMMUNITY STATS</b>\n"
+        f"👤 Total Users: <b>{total_users}</b>\n"
+        f"🟢 Active Users: <b>{active_users}</b>\n\n"
+
+        "━━━━━━━━━━━━━━━━━━\n\n"
+
+        f"🤝 Total User Deals: <b>{total_user_deals}</b>\n\n"
     )
 
     if not users:
-        text += "🏆 Leaderboard is Empty\nNo user data is available yet."
+
+        text += (
+            "🏆 <b>Leaderboard is Empty</b>\n"
+            "No user data is available yet."
+        )
 
         return text
 
