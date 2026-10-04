@@ -5,6 +5,11 @@ from database.database import (
     update_holding
 )
 
+from commands.command_utils import (
+    normalize_command,
+    delete_command_message
+)
+
 
 # ==========================================
 # MM FEE CALCULATOR
@@ -40,7 +45,7 @@ def calculate_mm_fee(amount):
         return 160
 
     elif amount >= 3000:
-    # 3000+ ke liye next slabs
+        # 3000+ ke liye next slabs
         extra_slabs = int((amount - 3000) // 500)
         return 190 + (extra_slabs * 30)
 
@@ -71,7 +76,9 @@ def register_hold(bot):
     @bot.message_handler(
         func=lambda message:
         message.text
-        and message.text.strip().lower().startswith(".hold")
+        and normalize_command(message.text)
+        .lower()
+        .startswith(".hold")
     )
     def hold_command(message):
 
@@ -82,6 +89,7 @@ def register_hold(bot):
         if message.from_user.id not in MM_CHAT_IDS:
 
             if message.from_user.id in ADMIN_IDS:
+
                 bot.reply_to(
                     message,
                     "⚠️ Sirf MM ye command use kar sakta hai."
@@ -114,13 +122,22 @@ def register_hold(bot):
                 "⚠️ Is group mein koi active deal nahi hai."
             )
 
+            delete_command_message(
+                bot,
+                message
+            )
+
             return
 
         # ==================================
         # GET AMOUNT
         # ==================================
 
-        parts = message.text.strip().split()
+        normalized_text = normalize_command(
+            message.text
+        )
+
+        parts = normalized_text.strip().split()
 
         if len(parts) != 2:
 
@@ -134,18 +151,35 @@ def register_hold(bot):
                 parse_mode="HTML"
             )
 
+            delete_command_message(
+                bot,
+                message
+            )
+
             return
 
-        raw_amount = parts[1].replace("₹", "").strip()
+        raw_amount = (
+            parts[1]
+            .replace("₹", "")
+            .strip()
+        )
 
         try:
-            hold_amount = float(raw_amount)
+
+            hold_amount = float(
+                raw_amount
+            )
 
         except ValueError:
 
             bot.reply_to(
                 message,
                 "⚠️ Amount valid number hona chahiye."
+            )
+
+            delete_command_message(
+                bot,
+                message
             )
 
             return
@@ -155,6 +189,11 @@ def register_hold(bot):
             bot.reply_to(
                 message,
                 "⚠️ Minimum hold amount ₹10 hai."
+            )
+
+            delete_command_message(
+                bot,
+                message
             )
 
             return
@@ -172,6 +211,11 @@ def register_hold(bot):
             bot.reply_to(
                 message,
                 "⚠️ Is amount ke liye MM fee set nahi hai."
+            )
+
+            delete_command_message(
+                bot,
+                message
             )
 
             return
@@ -198,8 +242,13 @@ def register_hold(bot):
 
         try:
 
-            user_1 = bot.get_chat(user_1_id)
-            user_2 = bot.get_chat(user_2_id)
+            user_1 = bot.get_chat(
+                user_1_id
+            )
+
+            user_2 = bot.get_chat(
+                user_2_id
+            )
 
             user_1_name = (
                 user_1.first_name
@@ -276,3 +325,12 @@ def register_hold(bot):
             print(
                 f"Hold pin error: {error}"
             )
+
+        # ==================================
+        # DELETE COMMAND MESSAGE
+        # ==================================
+
+        delete_command_message(
+            bot,
+            message
+        )
