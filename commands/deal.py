@@ -46,10 +46,6 @@ def get_replied_user(message):
 
 def register_deal(bot):
 
-    # ======================================
-    # .deal / . deal
-    # ======================================
-
     @bot.message_handler(
         func=lambda message:
         message.text
@@ -57,13 +53,14 @@ def register_deal(bot):
     )
     def deal_command(message):
 
-        # ----------------------------------
+        # ==================================
         # MM ONLY
-        # ----------------------------------
+        # ==================================
 
         if message.from_user.id not in MM_CHAT_IDS:
 
             if message.from_user.id in ADMIN_IDS:
+
                 bot.reply_to(
                     message,
                     "⚠️ Sirf MM ye command use kar sakta hai."
@@ -71,20 +68,20 @@ def register_deal(bot):
 
             return
 
-        # ----------------------------------
+        # ==================================
         # GROUP ONLY
-        # ----------------------------------
+        # ==================================
 
         if message.chat.type not in [
             "group",
             "supergroup"
         ]:
+
             bot.reply_to(
                 message,
                 "❌ .deal sirf group mein use kar sakte ho."
             )
 
-            # Command delete
             delete_command_message(
                 bot,
                 message
@@ -94,9 +91,9 @@ def register_deal(bot):
 
         group_id = message.chat.id
 
-        # ----------------------------------
+        # ==================================
         # GET REPLIED USER
-        # ----------------------------------
+        # ==================================
 
         user = get_replied_user(message)
 
@@ -111,7 +108,6 @@ def register_deal(bot):
                 parse_mode="HTML"
             )
 
-            # Command delete
             delete_command_message(
                 bot,
                 message
@@ -119,9 +115,9 @@ def register_deal(bot):
 
             return
 
-        # ----------------------------------
-        # CHECK ALREADY ACTIVE DEAL
-        # ----------------------------------
+        # ==================================
+        # CHECK ACTIVE DEAL
+        # ==================================
 
         active_deal = get_active_deal(
             group_id
@@ -134,13 +130,12 @@ def register_deal(bot):
                 (
                     f"⚠️ Is group mein already "
                     f"<b>Deal #{active_deal['deal_id']}</b> active hai.\n\n"
-                    "Pehle <code>.removedeal</code> ya "
-                    "deal completion process use karo."
+                    "Pehle current deal complete karo "
+                    "ya <code>.removedeal</code> use karo."
                 ),
                 parse_mode="HTML"
             )
 
-            # Command delete
             delete_command_message(
                 bot,
                 message
@@ -148,9 +143,9 @@ def register_deal(bot):
 
             return
 
-        # ----------------------------------
+        # ==================================
         # FIRST USER
-        # ----------------------------------
+        # ==================================
 
         if group_id not in pending_deal_users:
 
@@ -193,7 +188,6 @@ def register_deal(bot):
                 parse_mode="HTML"
             )
 
-            # Command delete
             delete_command_message(
                 bot,
                 message
@@ -201,18 +195,18 @@ def register_deal(bot):
 
             return
 
-        # ----------------------------------
+        # ==================================
         # SECOND USER
-        # ----------------------------------
+        # ==================================
 
         deal_data = pending_deal_users[group_id]
 
         user_1_id = deal_data["user_1_id"]
         user_2_id = user.id
 
-        # ----------------------------------
+        # ==================================
         # SAME USER CHECK
-        # ----------------------------------
+        # ==================================
 
         if user_1_id == user_2_id:
 
@@ -221,7 +215,6 @@ def register_deal(bot):
                 "⚠️ User 1 aur User 2 same nahi ho sakte."
             )
 
-            # Command delete
             delete_command_message(
                 bot,
                 message
@@ -229,9 +222,9 @@ def register_deal(bot):
 
             return
 
-        # ----------------------------------
+        # ==================================
         # SAVE USER 2
-        # ----------------------------------
+        # ==================================
 
         save_user(
             chat_id=user.id,
@@ -239,9 +232,9 @@ def register_deal(bot):
             username=user.username or ""
         )
 
-        # ----------------------------------
+        # ==================================
         # CREATE DEAL
-        # ----------------------------------
+        # ==================================
 
         deal_id = create_deal(
             group_chat_id=group_id,
@@ -249,9 +242,9 @@ def register_deal(bot):
             user_2_id=user_2_id
         )
 
-        # ----------------------------------
-        # USER DETAILS
-        # ----------------------------------
+        # ==================================
+        # USERNAME
+        # ==================================
 
         user_1_username = (
             f"@{deal_data['user_1_username']}"
@@ -265,18 +258,18 @@ def register_deal(bot):
             else "No Username"
         )
 
-        # ----------------------------------
-        # CLEAR TEMP SETUP
-        # ----------------------------------
+        # ==================================
+        # CLEAR TEMP DATA
+        # ==================================
 
         pending_deal_users.pop(
             group_id,
             None
         )
 
-        # ----------------------------------
+        # ==================================
         # FINAL DEAL MESSAGE
-        # ----------------------------------
+        # ==================================
 
         bot.send_message(
             group_id,
@@ -299,15 +292,17 @@ def register_deal(bot):
                 f"💬 <b>Group ID:</b> <code>{group_id}</code>\n"
                 "⏳ <b>Status:</b> Active\n\n"
 
-                "💰 Ab amount ke liye "
-                "<code>.payment</code> use karo."
+                "🔒 Ab amount ke liye "
+                "<code>.hold</code> use karo.\n"
+                "💸 Hold ke baad <code>.release</code>, "
+                "<code>.refund</code> ya <code>.split</code> use hoga."
             ),
             parse_mode="HTML"
         )
 
-        # ----------------------------------
+        # ==================================
         # DELETE COMMAND
-        # ----------------------------------
+        # ==================================
 
         delete_command_message(
             bot,
