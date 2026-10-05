@@ -13,6 +13,106 @@ from commands.command_utils import (
 
 
 # ==========================================
+# USER MENTION
+# ==========================================
+
+def user_mention(user_id, name):
+
+    name = name or "User"
+
+    return (
+        f'<a href="tg://user?id={user_id}">'
+        f'{name}'
+        f'</a>'
+    )
+
+
+# ==========================================
+# FIND USER FROM REPLY / MENTION
+# ==========================================
+
+def get_target_user(bot, message, active_deal):
+
+    # --------------------------------------
+    # REPLY METHOD
+    # --------------------------------------
+
+    if message.reply_to_message:
+
+        replied_user = (
+            message.reply_to_message.from_user
+        )
+
+        if replied_user:
+
+            user_id = replied_user.id
+
+            if user_id in [
+                active_deal["user_1_id"],
+                active_deal["user_2_id"]
+            ]:
+                return user_id
+
+    # --------------------------------------
+    # MENTION METHOD
+    # --------------------------------------
+
+    entities = message.entities or []
+
+    for entity in entities:
+
+        if entity.type == "text_mention":
+
+            user = entity.user
+
+            if user:
+
+                user_id = user.id
+
+                if user_id in [
+                    active_deal["user_1_id"],
+                    active_deal["user_2_id"]
+                ]:
+                    return user_id
+
+        elif entity.type == "mention":
+
+            text = message.text or ""
+
+            username = text[
+                entity.offset:
+                entity.offset + entity.length
+            ].lstrip("@").lower()
+
+            for user_id in [
+                active_deal["user_1_id"],
+                active_deal["user_2_id"]
+            ]:
+
+                try:
+
+                    chat = bot.get_chat(user_id)
+
+                    chat_username = (
+                        chat.username or ""
+                    ).lower()
+
+                    if (
+                        chat_username
+                        and chat_username == username
+                    ):
+                        return user_id
+
+                except Exception as error:
+
+                    print(
+                        f"Release username lookup error: {error}"
+                    )
+
+    return None
+
+
+# ==========================================
 # REGISTER RELEASE
 # ==========================================
 
@@ -34,6 +134,7 @@ def register_release(bot):
         if message.from_user.id not in MM_CHAT_IDS:
 
             if message.from_user.id in ADMIN_IDS:
+
                 bot.reply_to(
                     message,
                     "⚠️ Sirf MM ye command use kar sakta hai."
@@ -52,7 +153,7 @@ def register_release(bot):
             return
 
         # ==================================
-        # GET ACTIVE DEAL
+        # ACTIVE DEAL
         # ==================================
 
         active_deal = get_active_deal(
@@ -74,111 +175,18 @@ def register_release(bot):
             return
 
         # ==================================
-        # COMMAND FORMAT
+        # CHECK HOLD
         # ==================================
 
-        command_text = normalize_command(
-            message.text
-        )
-
-        parts = command_text.split()
-
-        if len(parts) != 2:
-
-            bot.reply_to(
-                message,
-                (
-                    "⚠️ Release amount do.\n\n"
-                    "Example:\n"
-                    "<code>.release 500</code>"
-                ),
-                parse_mode="HTML"
-            )
-
-            delete_command_message(
-                bot,
-                message
-            )
-
-            return
-
-        # ==================================
-        # AMOUNT
-        # ==================================
-
-        raw_amount = (
-            parts[1]
-            .replace("₹", "")
-            .replace("$", "")
-            .strip()
-        )
-
-        try:
-
-            amount = float(
-                raw_amount
-            )
-
-        except ValueError:
-
-            bot.reply_to(
-                message,
-                "⚠️ Amount valid number hona chahiye."
-            )
-
-            delete_command_message(
-                bot,
-                message
-            )
-
-            return
-
-        if amount <= 0:
-
-            bot.reply_to(
-                message,
-                "⚠️ Amount 0 se greater hona chahiye."
-            )
-
-            delete_command_message(
-                bot,
-                message
-            )
-
-            return
-
-        # ==================================
-        # CHECK HOLD AMOUNT
-        # ==================================
-
-        holding_amount = (
-            active_deal["holding_amount"]
-            or 0
+        holding_amount = float(
+            active_deal["holding_amount"] or 0
         )
 
         if holding_amount <= 0:
 
             bot.reply_to(
                 message,
-                "⚠️ Is deal mein koi amount hold nahi hai."
-            )
-
-            delete_command_message(
-                bot,
-                message
-            )
-
-            return
-
-        if amount > holding_amount:
-
-            bot.reply_to(
-                message,
-                (
-                    f"⚠️ Release amount hold amount "
-                    f"<b>₹{holding_amount:g}</b> se zyada nahi ho sakta."
-                ),
-                parse_mode="HTML"
+                "⚠️ Pehle payment ko hold karo."
             )
 
             delete_command_message(
@@ -189,68 +197,36 @@ def register_release(bot):
             return
 
         # ==================================
-        # FIND RELEASE USER
+        # COMMAND
         # ==================================
 
-        # Agar MM kisi user ke message ko reply
-        # karke .release karta hai, wahi user
-        # release receiver maana jayega.
-
-        if not message.reply_to_message:
-
-            bot.reply_to(
-                message,
-                (
-                    "⚠️ Jis user ko amount release karna hai, "
-                    "uske message ko reply karke command bhejo.\n\n"
-                    "Example:\n"
-                    "<code>.release 500</code>"
-                ),
-                parse_mode="HTML"
-            )
-
-            delete_command_message(
-                bot,
-                message
-            )
-
-            return
-
-        release_user = (
-            message.reply_to_message.from_user
+        normalized_text = normalize_command(
+            message.text
         )
 
-        if not release_user:
+        parts = normalized_text.strip().split()
+
+        # ==================================
+        # USER CHECK
+        # ==================================
+
+        target_user_id = get_target_user(
+            bot,
+            message,
+            active_deal
+        )
+
+        if not target_user_id:
 
             bot.reply_to(
                 message,
-                "⚠️ Release user identify nahi ho paya."
-            )
-
-            delete_command_message(
-                bot,
-                message
-            )
-
-            return
-
-        release_user_id = release_user.id
-
-        # ==================================
-        # USER MUST BE IN DEAL
-        # ==================================
-
-        user_1_id = active_deal["user_1_id"]
-        user_2_id = active_deal["user_2_id"]
-
-        if release_user_id not in [
-            user_1_id,
-            user_2_id
-        ]:
-
-            bot.reply_to(
-                message,
-                "⚠️ Ye user is deal ka part nahi hai."
+                (
+                    "⚠️ Release kis user ko karna hai?\n\n"
+                    "User ko mention karo ya uske message par "
+                    "reply karke use karo.\n\n"
+                    "<code>.release @username</code>"
+                ),
+                parse_mode="HTML"
             )
 
             delete_command_message(
@@ -261,20 +237,48 @@ def register_release(bot):
             return
 
         # ==================================
-        # SAVE RELEASE EVENT
+        # GET USER NAME
+        # ==================================
+
+        try:
+
+            target_user = bot.get_chat(
+                target_user_id
+            )
+
+            target_name = (
+                target_user.first_name
+                or "User"
+            )
+
+        except Exception as error:
+
+            print(
+                f"Release user lookup error: {error}"
+            )
+
+            target_name = "User"
+
+        mention = user_mention(
+            target_user_id,
+            target_name
+        )
+
+        # ==================================
+        # RELEASE
         # ==================================
 
         success = record_release(
-            deal_id=active_deal["deal_id"],
-            user_id=release_user_id,
-            amount=amount
+            active_deal["deal_id"],
+            target_user_id,
+            holding_amount
         )
 
         if not success:
 
             bot.reply_to(
                 message,
-                "❌ Release save nahi ho paya."
+                "❌ Release process failed."
             )
 
             delete_command_message(
@@ -288,57 +292,47 @@ def register_release(bot):
         # COMPLETE DEAL
         # ==================================
 
-        complete_deal(
+        completed = complete_deal(
             active_deal["deal_id"]
         )
 
+        if not completed:
+
+            bot.reply_to(
+                message,
+                "⚠️ Release save ho gaya, lekin deal complete nahi ho payi."
+            )
+
+            delete_command_message(
+                bot,
+                message
+            )
+
+            return
+
         # ==================================
-        # USER NAME
+        # FORMAT AMOUNT
         # ==================================
 
-        user_name = (
-            release_user.first_name
-            or "User"
-        )
-
-        mention = (
-            f'<a href="tg://user?id={release_user_id}">'
-            f'{user_name}'
-            f'</a>'
-        )
+        amount_text = f"₹{holding_amount:g}"
 
         # ==================================
         # RELEASE MESSAGE
         # ==================================
 
-        release_message = bot.send_message(
+        bot.send_message(
             message.chat.id,
             (
-                "✅ <b>PAYMENT RELEASED</b>\n\n"
-                f"💰 <b>₹{amount:g}</b> released to "
-                f"{mention}\n\n"
-                "🤝 <b>Deal completed successfully.</b>"
+                f"✅ <b>PAYMENT RELEASED — {amount_text}</b>\n\n"
+
+                f"💰 <b>{amount_text} RELEASED</b>\n"
+                f"👤 <b>Receiver:</b> {mention}\n\n"
+
+                "🎉 <b>Deal completed successfully.</b>\n"
+                "📌 This deal is now closed."
             ),
             parse_mode="HTML"
         )
-
-        # ==================================
-        # PIN
-        # ==================================
-
-        try:
-
-            bot.pin_chat_message(
-                message.chat.id,
-                release_message.message_id,
-                disable_notification=True
-            )
-
-        except Exception as error:
-
-            print(
-                f"Release pin error: {error}"
-            )
 
         # ==================================
         # DELETE COMMAND
@@ -347,4 +341,4 @@ def register_release(bot):
         delete_command_message(
             bot,
             message
-          )
+        )
