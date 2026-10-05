@@ -161,6 +161,10 @@ def register_hold(bot):
 
             return
 
+        # ==================================
+        # GET AMOUNT
+        # ==================================
+
         raw_amount = (
             parts[1]
             .replace("₹", "")
@@ -186,6 +190,10 @@ def register_hold(bot):
             )
 
             return
+
+        # ==================================
+        # MINIMUM HOLD
+        # ==================================
 
         if hold_amount < 10:
 
@@ -223,19 +231,22 @@ def register_hold(bot):
 
             return
 
+        # ==================================
+        # TOTAL RECEIVED
+        # ==================================
+
         received_amount = (
             hold_amount + mm_fee
         )
 
         # ==================================
-        # SAVE HOLDING + FEE + TIME
+        # SAVE HOLDING + FEE
         # ==================================
 
         update_holding(
             active_deal["deal_id"],
             hold_amount,
-            mm_fee,
-            received_amount
+            mm_fee
         )
 
         # ==================================
@@ -273,6 +284,10 @@ def register_hold(bot):
 
             user_1_name = "User 1"
             user_2_name = "User 2"
+
+        # ==================================
+        # MENTIONS
+        # ==================================
 
         mention_1 = user_mention(
             user_1_id,
@@ -314,7 +329,7 @@ def register_hold(bot):
         )
 
         # ==================================
-        # PIN MESSAGE
+        # PIN HOLD MESSAGE
         # ==================================
 
         try:
