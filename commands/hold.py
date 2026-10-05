@@ -45,7 +45,6 @@ def calculate_mm_fee(amount):
         return 160
 
     elif amount >= 3000:
-        # 3000+ ke liye next slabs
         extra_slabs = int((amount - 3000) // 500)
         return 190 + (extra_slabs * 30)
 
@@ -130,7 +129,7 @@ def register_hold(bot):
             return
 
         # ==================================
-        # GET AMOUNT
+        # NORMALIZE COMMAND
         # ==================================
 
         normalized_text = normalize_command(
@@ -138,6 +137,10 @@ def register_hold(bot):
         )
 
         parts = normalized_text.strip().split()
+
+        # ==================================
+        # AMOUNT CHECK
+        # ==================================
 
         if len(parts) != 2:
 
@@ -225,12 +228,14 @@ def register_hold(bot):
         )
 
         # ==================================
-        # SAVE HOLDING
+        # SAVE HOLDING + FEE + TIME
         # ==================================
 
         update_holding(
             active_deal["deal_id"],
-            hold_amount
+            hold_amount,
+            mm_fee,
+            received_amount
         )
 
         # ==================================
@@ -327,7 +332,7 @@ def register_hold(bot):
             )
 
         # ==================================
-        # DELETE COMMAND MESSAGE
+        # DELETE COMMAND
         # ==================================
 
         delete_command_message(
