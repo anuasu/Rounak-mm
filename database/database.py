@@ -18,7 +18,24 @@ def get_connection():
 # ==========================================
 
 def current_time():
-    return datetime.now().isoformat()
+    return datetime.now().isoformat(timespec="seconds")
+
+
+# ==========================================
+# SAFE NUMBER
+# ==========================================
+
+def safe_amount(value):
+    try:
+        amount = float(value or 0)
+
+        if amount < 0:
+            return 0.0
+
+        return amount
+
+    except (TypeError, ValueError):
+        return 0.0
 
 
 # ==========================================
@@ -133,11 +150,8 @@ def init_database():
     """)
 
     cursor.execute("""
-        INSERT OR IGNORE INTO leaderboard_stats (
-            id,
-            total_deals,
-            total_amount
-        )
+        INSERT OR IGNORE INTO leaderboard_stats
+        (id, total_deals, total_amount)
         VALUES (1, 0, 0)
     """)
 
@@ -147,10 +161,10 @@ def init_database():
 
     cursor.execute("PRAGMA table_info(deals)")
 
-    deal_columns = [
+    deal_columns = {
         row["name"]
         for row in cursor.fetchall()
-    ]
+    }
 
     if "hold_at" not in deal_columns:
         cursor.execute("""
@@ -182,10 +196,10 @@ def init_database():
 
     cursor.execute("PRAGMA table_info(qr_settings)")
 
-    qr_columns = [
+    qr_columns = {
         row["name"]
         for row in cursor.fetchall()
-    ]
+    }
 
     if "upi_id" not in qr_columns:
         cursor.execute("""
@@ -227,8 +241,8 @@ def save_user(chat_id, first_name="", username=""):
             updated_at = excluded.updated_at
     """, (
         chat_id,
-        first_name,
-        username,
+        first_name or "",
+        username or "",
         now,
         now
     ))
@@ -276,10 +290,30 @@ def create_deal(
     connection = get_connection()
     cursor = connection.cursor()
 
-    now = current_time()
+    try:
 
-    cursor.execute("""
-        INSERT INTO deals (
+        deal_amount = safe_amount(deal_amount)
+        mm_fee = safe_amount(mm_fee)
+        total_received = safe_amount(total_received)
+        holding_amount = safe_amount(holding_amount)
+
+        now = current_time()
+
+        cursor.execute("""
+            INSERT INTO deals (
+                group_chat_id,
+                user_1_id,
+                user_2_id,
+                deal_amount,
+                mm_fee,
+                total_received,
+                holding_amount,
+                status,
+                final_action,
+                created_at
+            )
+            VALUES (?, ?, ?, ?, ?, ?, ?, 'pending', NULL, ?)
+        """, (
             group_chat_id,
             user_1_id,
             user_2_id,
@@ -287,47 +321,43 @@ def create_deal(
             mm_fee,
             total_received,
             holding_amount,
-            status,
-            final_action,
-            created_at
-        )
-        VALUES (?, ?, ?, ?, ?, ?, ?, 'pending', NULL, ?)
-    """, (
-        group_chat_id,
-        user_1_id,
-        user_2_id,
-        deal_amount,
-        mm_fee,
-        total_received,
-        holding_amount,
-        now
-    ))
+            now
+        ))
 
-    deal_id = cursor.lastrowid
+        deal_id = cursor.lastrowid
 
-    cursor.execute("""
-        INSERT INTO deal_events (
+        cursor.execute("""
+            INSERT INTO deal_events (
+                deal_id,
+                group_chat_id,
+                event_type,
+                user_id,
+                amount,
+                mm_fee,
+                event_time
+            )
+            VALUES (?, ?, 'created', NULL, ?, ?, ?)
+        """, (
             deal_id,
             group_chat_id,
-            event_type,
-            user_id,
-            amount,
+            deal_amount,
             mm_fee,
-            event_time
-        )
-        VALUES (?, ?, 'created', NULL, ?, ?, ?)
-    """, (
-        deal_id,
-        group_chat_id,
-        deal_amount,
-        mm_fee,
-        now
-    ))
+            now
+        ))
 
-    connection.commit()
-    connection.close()
+        connection.commit()
+        connection.close()
 
-    return deal_id
+        return deal_id
+
+    except Exception as error:
+
+        connection.rollback()
+        connection.close()
+
+        print(f"Create deal error: {error}")
+
+        return False
 
 
 # ==========================================
@@ -346,9 +376,106 @@ def add_deal_event(
     connection = get_connection()
     cursor = connection.cursor()
 
-    now = current_time()
+    try:
 
-    if group_chat_id is None:
+        amount = safe_amount(amount)
+        mm_fee = safe_amount(mm_fee)
+
+        now = current_time()
+
+        if group_chat_id is None:
+
+            cursor.execute("""
+                SELECT group_chat_id
+                FROM deals
+                WHERE deal_id = ?
+            """, (deal_id,))
+
+            deal = cursor.fetchone()
+
+            if deal:
+                group_chat_id = deal["group_chat_id"]
+
+        cursor.execute("""
+            INSERT INTO deal_events (
+                deal_id,
+                group_chat_id,
+                event_type,
+                user_id,
+                amount,
+                mm_fee,
+                event_time
+            )
+            VALUES (?, ?, ?, ?, ?, ?, ?)
+        """, (
+            deal_id,
+            group_chat_id,
+            event_type,
+            user_id,
+            amount,
+            mm_fee,
+            now
+        ))
+
+        event_id = cursor.lastrowid
+
+        connection.commit()
+        connection.close()
+
+        return event_id
+
+    except Exception as error:
+
+        connection.rollback()
+        connection.close()
+
+        print(f"Deal event error: {error}")
+
+        return False
+
+
+# ==========================================
+# UPDATE PAYMENT
+# ==========================================
+
+def update_payment(deal_id, amount, mm_fee=0):
+
+    connection = get_connection()
+    cursor = connection.cursor()
+
+    try:
+
+        amount = safe_amount(amount)
+        mm_fee = safe_amount(mm_fee)
+
+        if amount <= 0:
+            connection.close()
+            return False
+
+        now = current_time()
+
+        # Payment received by MM
+        total_received = amount + mm_fee
+
+        cursor.execute("""
+            UPDATE deals
+            SET
+                deal_amount = ?,
+                total_received = ?,
+                mm_fee = ?
+            WHERE deal_id = ?
+            AND status = 'pending'
+            AND final_action IS NULL
+        """, (
+            amount,
+            total_received,
+            mm_fee,
+            deal_id
+        ))
+
+        if cursor.rowcount == 0:
+            connection.close()
+            return False
 
         cursor.execute("""
             SELECT group_chat_id
@@ -358,36 +485,43 @@ def add_deal_event(
 
         deal = cursor.fetchone()
 
-        if deal:
-            group_chat_id = deal["group_chat_id"]
+        group_chat_id = (
+            deal["group_chat_id"]
+            if deal else None
+        )
 
-    cursor.execute("""
-        INSERT INTO deal_events (
+        cursor.execute("""
+            INSERT INTO deal_events (
+                deal_id,
+                group_chat_id,
+                event_type,
+                user_id,
+                amount,
+                mm_fee,
+                event_time
+            )
+            VALUES (?, ?, 'payment', NULL, ?, ?, ?)
+        """, (
             deal_id,
             group_chat_id,
-            event_type,
-            user_id,
             amount,
             mm_fee,
-            event_time
-        )
-        VALUES (?, ?, ?, ?, ?, ?, ?)
-    """, (
-        deal_id,
-        group_chat_id,
-        event_type,
-        user_id,
-        amount,
-        mm_fee,
-        now
-    ))
+            now
+        ))
 
-    event_id = cursor.lastrowid
+        connection.commit()
+        connection.close()
 
-    connection.commit()
-    connection.close()
+        return True
 
-    return event_id
+    except Exception as error:
+
+        connection.rollback()
+        connection.close()
+
+        print(f"Payment update error: {error}")
+
+        return False
 
 
 # ==========================================
@@ -404,138 +538,95 @@ def update_holding(
     connection = get_connection()
     cursor = connection.cursor()
 
-    now = current_time()
+    try:
 
-    if received_amount is None:
-        received_amount = holding_amount + mm_fee
+        holding_amount = safe_amount(holding_amount)
+        mm_fee = safe_amount(mm_fee)
 
-    cursor.execute("""
-        UPDATE deals
-        SET
-            holding_amount = ?,
-            mm_fee = ?,
-            total_received = ?,
-            hold_at = ?
-        WHERE deal_id = ?
-        AND status = 'pending'
-    """, (
-        holding_amount,
-        mm_fee,
-        received_amount,
-        now,
-        deal_id
-    ))
+        if holding_amount <= 0:
+            connection.close()
+            return False
 
-    if cursor.rowcount == 0:
-        connection.close()
-        return False
+        now = current_time()
 
-    cursor.execute("""
-        SELECT group_chat_id
-        FROM deals
-        WHERE deal_id = ?
-    """, (deal_id,))
+        if received_amount is None:
+            received_amount = holding_amount + mm_fee
 
-    deal = cursor.fetchone()
+        received_amount = safe_amount(received_amount)
 
-    group_chat_id = (
-        deal["group_chat_id"]
-        if deal
-        else None
-    )
+        cursor.execute("""
+            UPDATE deals
+            SET
+                deal_amount = CASE
+                    WHEN deal_amount <= 0
+                    THEN ?
+                    ELSE deal_amount
+                END,
+                holding_amount = ?,
+                mm_fee = ?,
+                total_received = ?,
+                hold_at = ?
+            WHERE deal_id = ?
+            AND status = 'pending'
+            AND final_action IS NULL
+        """, (
+            holding_amount,
+            holding_amount,
+            mm_fee,
+            received_amount,
+            now,
+            deal_id
+        ))
 
-    cursor.execute("""
-        INSERT INTO deal_events (
+        if cursor.rowcount == 0:
+            connection.close()
+            return False
+
+        cursor.execute("""
+            SELECT group_chat_id
+            FROM deals
+            WHERE deal_id = ?
+        """, (deal_id,))
+
+        deal = cursor.fetchone()
+
+        group_chat_id = (
+            deal["group_chat_id"]
+            if deal else None
+        )
+
+        cursor.execute("""
+            INSERT INTO deal_events (
+                deal_id,
+                group_chat_id,
+                event_type,
+                user_id,
+                amount,
+                mm_fee,
+                event_time
+            )
+            VALUES (?, ?, 'hold', NULL, ?, ?, ?)
+        """, (
             deal_id,
             group_chat_id,
-            event_type,
-            user_id,
-            amount,
+            holding_amount,
             mm_fee,
-            event_time
-        )
-        VALUES (?, ?, 'hold', NULL, ?, ?, ?)
-    """, (
-        deal_id,
-        group_chat_id,
-        holding_amount,
-        mm_fee,
-        now
-    ))
+            now
+        ))
 
-    connection.commit()
-    connection.close()
-
-    return True
-
-
-# ==========================================
-# UPDATE PAYMENT
-# ==========================================
-
-def update_payment(deal_id, amount, mm_fee=0):
-
-    connection = get_connection()
-    cursor = connection.cursor()
-
-    now = current_time()
-
-    cursor.execute("""
-        UPDATE deals
-        SET
-            deal_amount = ?,
-            total_received = ?,
-            mm_fee = ?
-        WHERE deal_id = ?
-        AND status = 'pending'
-    """, (
-        amount,
-        amount,
-        mm_fee,
-        deal_id
-    ))
-
-    if cursor.rowcount == 0:
+        connection.commit()
         connection.close()
+
+        return True
+
+    except Exception as error:
+
+        connection.rollback()
+        connection.close()
+
+        print(f"Holding update error: {error}")
+
         return False
-
-    cursor.execute("""
-        SELECT group_chat_id
-        FROM deals
-        WHERE deal_id = ?
-    """, (deal_id,))
-
-    deal = cursor.fetchone()
-
-    group_chat_id = (
-        deal["group_chat_id"]
-        if deal
-        else None
-    )
-
-    cursor.execute("""
-        INSERT INTO deal_events (
-            deal_id,
-            group_chat_id,
-            event_type,
-            user_id,
-            amount,
-            mm_fee,
-            event_time
-        )
-        VALUES (?, ?, 'payment', NULL, ?, ?, ?)
-    """, (
-        deal_id,
-        group_chat_id,
-        amount,
-        mm_fee,
-        now
-    ))
-
-    connection.commit()
-    connection.close()
-
-    return True
 
 
 # ==========================================
@@ -597,33 +688,14 @@ def get_active_deal(group_chat_id):
 
 
 # ==========================================
-# FINALIZE DEAL
+# FINALIZE DEAL — SAFE
 # ==========================================
 
 def finalize_deal(
     deal_id,
     action,
-    user_amounts
+    user_amounts=None
 ):
-
-    """
-    action:
-        release
-        refund
-        split
-
-    user_amounts:
-        {
-            user_id: amount,
-            user_id: amount
-        }
-
-    For release/refund:
-        Both users can receive the same final amount.
-
-    For split:
-        Each user gets the exact amount supplied.
-    """
 
     allowed_actions = {
         "release",
@@ -668,170 +740,251 @@ def finalize_deal(
             return False
 
         # ==================================
+        # REAL AMOUNTS
+        # ==================================
+
+        deal_amount = safe_amount(
+            deal["deal_amount"]
+        )
+
+        holding_amount = safe_amount(
+            deal["holding_amount"]
+        )
+
+        total_received = safe_amount(
+            deal["total_received"]
+        )
+
+        mm_fee = safe_amount(
+            deal["mm_fee"]
+        )
+
+        # ==================================
+        # FALLBACK
+        # ==================================
+
+        if deal_amount <= 0 and holding_amount > 0:
+            deal_amount = holding_amount
+
+        # ==================================
+        # ACTUAL MONEY AVAILABLE
+        # ==================================
+
+        max_transaction = max(
+            holding_amount,
+            total_received,
+            deal_amount
+        )
+
+        if max_transaction <= 0:
+            connection.close()
+            return False
+
+        # ==================================
         # USERS
         # ==================================
 
         user_1_id = deal["user_1_id"]
         user_2_id = deal["user_2_id"]
 
-        amount_1 = float(
+        if user_amounts is None:
+            user_amounts = {}
+
+        amount_1 = safe_amount(
             user_amounts.get(user_1_id, 0)
         )
 
-        amount_2 = float(
+        amount_2 = safe_amount(
             user_amounts.get(user_2_id, 0)
         )
 
+        total_final = amount_1 + amount_2
+
         # ==================================
-        # FINAL EVENT
+        # HARD SAFETY CHECK
         # ==================================
+        # Prevents:
+        # ₹100 deal -> ₹1000 refund
+
+        if total_final > max_transaction:
+
+            print(
+                f"FINALIZE BLOCKED | "
+                f"Deal #{deal_id} | "
+                f"Requested ₹{total_final} | "
+                f"Available ₹{max_transaction}"
+            )
+
+            connection.close()
+            return False
 
         now = current_time()
 
+        # ==================================
+        # FINAL EVENTS
+        # ==================================
+
         if action == "release":
 
-            cursor.execute("""
-                INSERT INTO deal_events (
-                    deal_id,
-                    group_chat_id,
-                    event_type,
-                    user_id,
-                    amount,
-                    mm_fee,
-                    event_time
-                )
-                VALUES (?, ?, 'release', ?, ?, 0, ?)
-            """, (
-                deal_id,
-                deal["group_chat_id"],
-                user_1_id,
-                amount_1,
-                now
-            ))
+            if amount_1 > 0:
 
-            cursor.execute("""
-                INSERT INTO deal_events (
+                cursor.execute("""
+                    INSERT INTO deal_events (
+                        deal_id,
+                        group_chat_id,
+                        event_type,
+                        user_id,
+                        amount,
+                        mm_fee,
+                        event_time
+                    )
+                    VALUES (?, ?, 'release', ?, ?, 0, ?)
+                """, (
                     deal_id,
-                    group_chat_id,
-                    event_type,
-                    user_id,
-                    amount,
-                    mm_fee,
-                    event_time
-                )
-                VALUES (?, ?, 'release', ?, ?, 0, ?)
-            """, (
-                deal_id,
-                deal["group_chat_id"],
-                user_2_id,
-                amount_2,
-                now
-            ))
+                    deal["group_chat_id"],
+                    user_1_id,
+                    amount_1,
+                    now
+                ))
+
+            if amount_2 > 0:
+
+                cursor.execute("""
+                    INSERT INTO deal_events (
+                        deal_id,
+                        group_chat_id,
+                        event_type,
+                        user_id,
+                        amount,
+                        mm_fee,
+                        event_time
+                    )
+                    VALUES (?, ?, 'release', ?, ?, 0, ?)
+                """, (
+                    deal_id,
+                    deal["group_chat_id"],
+                    user_2_id,
+                    amount_2,
+                    now
+                ))
 
         elif action == "refund":
 
-            cursor.execute("""
-                INSERT INTO deal_events (
-                    deal_id,
-                    group_chat_id,
-                    event_type,
-                    user_id,
-                    amount,
-                    mm_fee,
-                    event_time
-                )
-                VALUES (?, ?, 'refund', ?, ?, 0, ?)
-            """, (
-                deal_id,
-                deal["group_chat_id"],
-                user_1_id,
-                amount_1,
-                now
-            ))
+            if amount_1 > 0:
 
-            cursor.execute("""
-                INSERT INTO deal_events (
+                cursor.execute("""
+                    INSERT INTO deal_events (
+                        deal_id,
+                        group_chat_id,
+                        event_type,
+                        user_id,
+                        amount,
+                        mm_fee,
+                        event_time
+                    )
+                    VALUES (?, ?, 'refund', ?, ?, 0, ?)
+                """, (
                     deal_id,
-                    group_chat_id,
-                    event_type,
-                    user_id,
-                    amount,
-                    mm_fee,
-                    event_time
-                )
-                VALUES (?, ?, 'refund', ?, ?, 0, ?)
-            """, (
-                deal_id,
-                deal["group_chat_id"],
-                user_2_id,
-                amount_2,
-                now
-            ))
+                    deal["group_chat_id"],
+                    user_1_id,
+                    amount_1,
+                    now
+                ))
+
+            if amount_2 > 0:
+
+                cursor.execute("""
+                    INSERT INTO deal_events (
+                        deal_id,
+                        group_chat_id,
+                        event_type,
+                        user_id,
+                        amount,
+                        mm_fee,
+                        event_time
+                    )
+                    VALUES (?, ?, 'refund', ?, ?, 0, ?)
+                """, (
+                    deal_id,
+                    deal["group_chat_id"],
+                    user_2_id,
+                    amount_2,
+                    now
+                ))
 
         elif action == "split":
 
-            cursor.execute("""
-                INSERT INTO deal_events (
-                    deal_id,
-                    group_chat_id,
-                    event_type,
-                    user_id,
-                    amount,
-                    mm_fee,
-                    event_time
-                )
-                VALUES (?, ?, 'split_release', ?, ?, 0, ?)
-            """, (
-                deal_id,
-                deal["group_chat_id"],
-                user_1_id,
-                amount_1,
-                now
-            ))
+            if amount_1 > 0:
 
-            cursor.execute("""
-                INSERT INTO deal_events (
+                cursor.execute("""
+                    INSERT INTO deal_events (
+                        deal_id,
+                        group_chat_id,
+                        event_type,
+                        user_id,
+                        amount,
+                        mm_fee,
+                        event_time
+                    )
+                    VALUES (?, ?, 'split_release', ?, ?, 0, ?)
+                """, (
                     deal_id,
-                    group_chat_id,
-                    event_type,
-                    user_id,
-                    amount,
-                    mm_fee,
-                    event_time
-                )
-                VALUES (?, ?, 'split_refund', ?, ?, 0, ?)
-            """, (
-                deal_id,
-                deal["group_chat_id"],
-                user_2_id,
-                amount_2,
-                now
-            ))
+                    deal["group_chat_id"],
+                    user_1_id,
+                    amount_1,
+                    now
+                ))
+
+            if amount_2 > 0:
+
+                cursor.execute("""
+                    INSERT INTO deal_events (
+                        deal_id,
+                        group_chat_id,
+                        event_type,
+                        user_id,
+                        amount,
+                        mm_fee,
+                        event_time
+                    )
+                    VALUES (?, ?, 'split_refund', ?, ?, 0, ?)
+                """, (
+                    deal_id,
+                    deal["group_chat_id"],
+                    user_2_id,
+                    amount_2,
+                    now
+                ))
 
         # ==================================
-        # UPDATE DEAL
+        # COMPLETE DEAL
         # ==================================
 
         cursor.execute("""
             UPDATE deals
             SET
+                deal_amount = ?,
                 status = 'completed',
                 final_action = ?,
                 completed_at = ?,
+
                 release_at = CASE
                     WHEN ? IN ('release', 'split')
                     THEN ?
                     ELSE release_at
                 END,
+
                 refund_at = CASE
                     WHEN ? IN ('refund', 'split')
                     THEN ?
                     ELSE refund_at
                 END
+
             WHERE deal_id = ?
             AND status = 'pending'
             AND final_action IS NULL
         """, (
+            deal_amount,
             action,
             now,
             action,
@@ -842,12 +995,14 @@ def finalize_deal(
         ))
 
         if cursor.rowcount == 0:
+
             connection.rollback()
             connection.close()
+
             return False
 
         # ==================================
-        # LEADERBOARD
+        # MM LEADERBOARD
         # ==================================
 
         cursor.execute("""
@@ -857,7 +1012,7 @@ def finalize_deal(
                 total_amount = total_amount + ?
             WHERE id = 1
         """, (
-            deal["deal_amount"],
+            deal_amount,
         ))
 
         # ==================================
@@ -868,7 +1023,8 @@ def finalize_deal(
             UPDATE users
             SET
                 completed_deals = completed_deals + 1,
-                total_deal_amount = total_deal_amount + ?,
+                total_deal_amount =
+                    total_deal_amount + ?,
                 updated_at = ?
             WHERE chat_id = ?
         """, (
@@ -885,7 +1041,8 @@ def finalize_deal(
             UPDATE users
             SET
                 completed_deals = completed_deals + 1,
-                total_deal_amount = total_deal_amount + ?,
+                total_deal_amount =
+                    total_deal_amount + ?,
                 updated_at = ?
             WHERE chat_id = ?
         """, (
@@ -926,6 +1083,8 @@ def record_release(
 
     try:
 
+        amount = safe_amount(amount)
+
         cursor.execute("""
             SELECT *
             FROM deals
@@ -939,6 +1098,16 @@ def record_release(
             return False
 
         if deal["status"] == "completed":
+            connection.close()
+            return False
+
+        available = max(
+            safe_amount(deal["holding_amount"]),
+            safe_amount(deal["total_received"]),
+            safe_amount(deal["deal_amount"])
+        )
+
+        if amount > available:
             connection.close()
             return False
 
@@ -982,9 +1151,7 @@ def record_release(
         connection.rollback()
         connection.close()
 
-        print(
-            f"Release event error: {error}"
-        )
+        print(f"Release event error: {error}")
 
         return False
 
@@ -1004,6 +1171,8 @@ def record_refund(
 
     try:
 
+        amount = safe_amount(amount)
+
         cursor.execute("""
             SELECT *
             FROM deals
@@ -1017,6 +1186,17 @@ def record_refund(
             return False
 
         if deal["status"] == "completed":
+            connection.close()
+            return False
+
+        available = max(
+            safe_amount(deal["holding_amount"]),
+            safe_amount(deal["total_received"]),
+            safe_amount(deal["deal_amount"])
+        )
+
+        # Prevent impossible refund
+        if amount > available:
             connection.close()
             return False
 
@@ -1060,9 +1240,7 @@ def record_refund(
         connection.rollback()
         connection.close()
 
-        print(
-            f"Refund event error: {error}"
-        )
+        print(f"Refund event error: {error}")
 
         return False
 
@@ -1084,6 +1262,9 @@ def record_split(
 
     try:
 
+        refund_amount = safe_amount(refund_amount)
+        release_amount = safe_amount(release_amount)
+
         cursor.execute("""
             SELECT *
             FROM deals
@@ -1100,56 +1281,70 @@ def record_split(
             connection.close()
             return False
 
+        available = max(
+            safe_amount(deal["holding_amount"]),
+            safe_amount(deal["total_received"]),
+            safe_amount(deal["deal_amount"])
+        )
+
+        if refund_amount + release_amount > available:
+            connection.close()
+            return False
+
         now = current_time()
 
         # ==================================
         # REFUND SIDE
         # ==================================
 
-        cursor.execute("""
-            INSERT INTO deal_events (
+        if refund_amount > 0:
+
+            cursor.execute("""
+                INSERT INTO deal_events (
+                    deal_id,
+                    group_chat_id,
+                    event_type,
+                    user_id,
+                    amount,
+                    mm_fee,
+                    event_time
+                )
+                VALUES (?, ?, 'split_refund', ?, ?, 0, ?)
+            """, (
                 deal_id,
-                group_chat_id,
-                event_type,
-                user_id,
-                amount,
-                mm_fee,
-                event_time
-            )
-            VALUES (?, ?, 'split_refund', ?, ?, 0, ?)
-        """, (
-            deal_id,
-            deal["group_chat_id"],
-            refund_user_id,
-            refund_amount,
-            now
-        ))
+                deal["group_chat_id"],
+                refund_user_id,
+                refund_amount,
+                now
+            ))
 
         # ==================================
         # RELEASE SIDE
         # ==================================
 
-        cursor.execute("""
-            INSERT INTO deal_events (
+        if release_amount > 0:
+
+            cursor.execute("""
+                INSERT INTO deal_events (
+                    deal_id,
+                    group_chat_id,
+                    event_type,
+                    user_id,
+                    amount,
+                    mm_fee,
+                    event_time
+                )
+                VALUES (?, ?, 'split_release', ?, ?, 0, ?)
+            """, (
                 deal_id,
-                group_chat_id,
-                event_type,
-                user_id,
-                amount,
-                mm_fee,
-                event_time
-            )
-            VALUES (?, ?, 'split_release', ?, ?, 0, ?)
-        """, (
-            deal_id,
-            deal["group_chat_id"],
-            release_user_id,
-            release_amount,
-            now
-        ))
+                deal["group_chat_id"],
+                release_user_id,
+                release_amount,
+                now
+            ))
 
         # ==================================
-        # MARK COMPLETED
+        # COMPLETE
         # ==================================
 
         cursor.execute("""
@@ -1171,13 +1366,22 @@ def record_split(
         ))
 
         if cursor.rowcount == 0:
+
             connection.rollback()
             connection.close()
+
             return False
 
         # ==================================
         # LEADERBOARD
         # ==================================
+
+        deal_amount = safe_amount(
+            deal["deal_amount"]
+        )
+
+        if deal_amount <= 0:
+            deal_amount = available
 
         cursor.execute("""
             UPDATE leaderboard_stats
@@ -1186,7 +1390,7 @@ def record_split(
                 total_amount = total_amount + ?
             WHERE id = 1
         """, (
-            deal["deal_amount"],
+            deal_amount,
         ))
 
         # ==================================
@@ -1197,7 +1401,8 @@ def record_split(
             UPDATE users
             SET
                 completed_deals = completed_deals + 1,
-                total_deal_amount = total_deal_amount + ?,
+                total_deal_amount =
+                    total_deal_amount + ?,
                 updated_at = ?
             WHERE chat_id = ?
         """, (
@@ -1214,7 +1419,8 @@ def record_split(
             UPDATE users
             SET
                 completed_deals = completed_deals + 1,
-                total_deal_amount = total_deal_amount + ?,
+                total_deal_amount =
+                    total_deal_amount + ?,
                 updated_at = ?
             WHERE chat_id = ?
         """, (
@@ -1233,15 +1439,13 @@ def record_split(
         connection.rollback()
         connection.close()
 
-        print(
-            f"Split error: {error}"
-        )
+        print(f"Split error: {error}")
 
         return False
 
 
 # ==========================================
-# COMPLETE DEAL — LEGACY COMPATIBILITY
+# COMPLETE DEAL — LEGACY
 # ==========================================
 
 def complete_deal(deal_id):
@@ -1265,14 +1469,17 @@ def complete_deal(deal_id):
     if deal["status"] == "completed":
         return False
 
-    amount = deal["deal_amount"]
+    amount = safe_amount(deal["deal_amount"])
+
+    if amount <= 0:
+        amount = safe_amount(deal["holding_amount"])
 
     return finalize_deal(
         deal_id,
         "release",
         {
             deal["user_1_id"]: amount,
-            deal["user_2_id"]: amount
+            deal["user_2_id"]: 0
         }
     )
 
@@ -1329,6 +1536,7 @@ def get_total_user_deals():
 
     return total
 
+
 # ==========================================
 # RAUNAK MM TOTAL STATS
 # ==========================================
@@ -1362,7 +1570,6 @@ def get_mm_stats():
     }
 
 
-
 # ==========================================
 # GET USER DEAL HISTORY
 # ==========================================
@@ -1373,11 +1580,24 @@ def get_user_deals(chat_id):
     cursor = connection.cursor()
 
     cursor.execute("""
-        SELECT *
-        FROM deals
-        WHERE user_1_id = ?
-           OR user_2_id = ?
-        ORDER BY deal_id DESC
+        SELECT
+            d.*,
+            u1.first_name AS user_1_name,
+            u1.username AS user_1_username,
+            u2.first_name AS user_2_name,
+            u2.username AS user_2_username
+        FROM deals d
+
+        LEFT JOIN users u1
+            ON d.user_1_id = u1.chat_id
+
+        LEFT JOIN users u2
+            ON d.user_2_id = u2.chat_id
+
+        WHERE d.user_1_id = ?
+           OR d.user_2_id = ?
+
+        ORDER BY d.deal_id DESC
     """, (
         chat_id,
         chat_id
@@ -1400,10 +1620,18 @@ def get_deal_events(deal_id):
     cursor = connection.cursor()
 
     cursor.execute("""
-        SELECT *
-        FROM deal_events
-        WHERE deal_id = ?
-        ORDER BY event_id ASC
+        SELECT
+            e.*,
+            u.first_name,
+            u.username
+        FROM deal_events e
+
+        LEFT JOIN users u
+            ON e.user_id = u.chat_id
+
+        WHERE e.deal_id = ?
+
+        ORDER BY e.event_id ASC
     """, (
         deal_id,
     ))
@@ -1427,10 +1655,23 @@ def get_today_deals():
     today = datetime.now().strftime("%Y-%m-%d")
 
     cursor.execute("""
-        SELECT *
-        FROM deals
-        WHERE DATE(created_at) = ?
-        ORDER BY deal_id ASC
+        SELECT
+            d.*,
+            u1.first_name AS user_1_name,
+            u1.username AS user_1_username,
+            u2.first_name AS user_2_name,
+            u2.username AS user_2_username
+        FROM deals d
+
+        LEFT JOIN users u1
+            ON d.user_1_id = u1.chat_id
+
+        LEFT JOIN users u2
+            ON d.user_2_id = u2.chat_id
+
+        WHERE DATE(d.created_at) = ?
+
+        ORDER BY d.deal_id ASC
     """, (
         today,
     ))
@@ -1452,10 +1693,23 @@ def get_deals_by_date(date_text):
     cursor = connection.cursor()
 
     cursor.execute("""
-        SELECT *
-        FROM deals
-        WHERE DATE(created_at) = ?
-        ORDER BY deal_id ASC
+        SELECT
+            d.*,
+            u1.first_name AS user_1_name,
+            u1.username AS user_1_username,
+            u2.first_name AS user_2_name,
+            u2.username AS user_2_username
+        FROM deals d
+
+        LEFT JOIN users u1
+            ON d.user_1_id = u1.chat_id
+
+        LEFT JOIN users u2
+            ON d.user_2_id = u2.chat_id
+
+        WHERE DATE(d.created_at) = ?
+
+        ORDER BY d.deal_id ASC
     """, (
         date_text,
     ))
@@ -1477,10 +1731,18 @@ def get_events_by_date(date_text):
     cursor = connection.cursor()
 
     cursor.execute("""
-        SELECT *
-        FROM deal_events
-        WHERE DATE(event_time) = ?
-        ORDER BY event_id ASC
+        SELECT
+            e.*,
+            u.first_name,
+            u.username
+        FROM deal_events e
+
+        LEFT JOIN users u
+            ON e.user_id = u.chat_id
+
+        WHERE DATE(e.event_time) = ?
+
+        ORDER BY e.event_id ASC
     """, (
         date_text,
     ))
@@ -1505,7 +1767,7 @@ def get_daily_summary(date_text=None):
         date_text = datetime.now().strftime("%Y-%m-%d")
 
     # ======================================
-    # DEALS CREATED TODAY
+    # CREATED DEALS
     # ======================================
 
     cursor.execute("""
@@ -1523,7 +1785,17 @@ def get_daily_summary(date_text=None):
     # ======================================
 
     cursor.execute("""
-        SELECT COALESCE(SUM(deal_amount), 0)
+        SELECT
+            COALESCE(
+                SUM(
+                    CASE
+                        WHEN deal_amount > 0
+                        THEN deal_amount
+                        ELSE holding_amount
+                    END
+                ),
+                0
+            )
         FROM deals
         WHERE DATE(created_at) = ?
     """, (
@@ -1533,7 +1805,7 @@ def get_daily_summary(date_text=None):
     total_amount = cursor.fetchone()[0] or 0
 
     # ======================================
-    # PAYMENT EVENTS
+    # PAYMENT
     # ======================================
 
     cursor.execute("""
@@ -1570,10 +1842,7 @@ def get_daily_summary(date_text=None):
         SELECT COALESCE(SUM(mm_fee), 0)
         FROM deal_events
         WHERE DATE(event_time) = ?
-        AND event_type IN (
-            'payment',
-            'hold'
-        )
+        AND event_type IN ('payment', 'hold')
     """, (
         date_text,
     ))
@@ -1617,7 +1886,7 @@ def get_daily_summary(date_text=None):
     total_refund = cursor.fetchone()[0] or 0
 
     # ======================================
-    # COMPLETED DEALS
+    # COMPLETED
     # ======================================
 
     cursor.execute("""
@@ -1632,7 +1901,7 @@ def get_daily_summary(date_text=None):
     completed_deals = cursor.fetchone()[0] or 0
 
     # ======================================
-    # PENDING DEALS
+    # PENDING
     # ======================================
 
     cursor.execute("""
@@ -1647,28 +1916,16 @@ def get_daily_summary(date_text=None):
 
     return {
         "date": date_text,
-
         "total_deals": total_deals,
-
         "completed_deals": completed_deals,
-
         "pending_deals": pending_deals,
-
         "total_amount": total_amount,
-
         "total_payment": total_payment,
-
         "total_hold": total_hold,
-
         "total_fee": total_fee,
-
         "total_release": total_release,
-
         "total_refund": total_refund
     }
-
-
-
 
 
 # ==========================================
@@ -2075,11 +2332,8 @@ def get_backup_data():
             "total_deals": mm_stats["total_deals"] or 0,
             "total_amount": mm_stats["total_amount"] or 0
         },
-
         "users": user_data,
-
         "deals": deal_data,
-
         "deal_events": event_data
     }
 
@@ -2111,7 +2365,7 @@ def restore_backup_data(backup_data):
             )
         )
 
-        total_amount = float(
+        total_amount = safe_amount(
             raunak_data.get(
                 "total_amount",
                 0
@@ -2165,8 +2419,8 @@ def restore_backup_data(backup_data):
                 user["user_id"],
                 user.get("first_name", ""),
                 user.get("username", ""),
-                user.get("deals", 0),
-                user.get("amount", 0),
+                int(user.get("deals", 0)),
+                safe_amount(user.get("amount", 0)),
                 now,
                 now
             ))
@@ -2201,10 +2455,10 @@ def restore_backup_data(backup_data):
                 deal.get("group_chat_id"),
                 deal.get("user_1_id"),
                 deal.get("user_2_id"),
-                deal.get("deal_amount", 0),
-                deal.get("mm_fee", 0),
-                deal.get("total_received", 0),
-                deal.get("holding_amount", 0),
+                safe_amount(deal.get("deal_amount", 0)),
+                safe_amount(deal.get("mm_fee", 0)),
+                safe_amount(deal.get("total_received", 0)),
+                safe_amount(deal.get("holding_amount", 0)),
                 deal.get("status", "pending"),
                 deal.get("final_action"),
                 deal.get("created_at"),
@@ -2238,8 +2492,8 @@ def restore_backup_data(backup_data):
                 event.get("group_chat_id"),
                 event.get("event_type"),
                 event.get("user_id"),
-                event.get("amount", 0),
-                event.get("mm_fee", 0),
+                safe_amount(event.get("amount", 0)),
+                safe_amount(event.get("mm_fee", 0)),
                 event.get("event_time")
             ))
 
@@ -2251,9 +2505,7 @@ def restore_backup_data(backup_data):
 
         connection.rollback()
 
-        print(
-            f"Restore error: {error}"
-        )
+        print(f"Restore error: {error}")
 
         return False
 
@@ -2303,3 +2555,76 @@ def get_active_users():
     connection.close()
 
     return active
+
+
+# ==========================================
+# DEAL HISTORY WITH USERS
+# ==========================================
+
+def get_deal_history_with_users(deal_id):
+
+    connection = get_connection()
+    cursor = connection.cursor()
+
+    cursor.execute("""
+        SELECT
+            d.*,
+
+            u1.first_name AS user_1_name,
+            u1.username AS user_1_username,
+
+            u2.first_name AS user_2_name,
+            u2.username AS user_2_username
+
+        FROM deals d
+
+        LEFT JOIN users u1
+            ON d.user_1_id = u1.chat_id
+
+        LEFT JOIN users u2
+            ON d.user_2_id = u2.chat_id
+
+        WHERE d.deal_id = ?
+    """, (
+        deal_id,
+    ))
+
+    deal = cursor.fetchone()
+
+    connection.close()
+
+    return deal
+
+
+# ==========================================
+# DEAL EVENTS WITH USERS
+# ==========================================
+
+def get_deal_events_with_users(deal_id):
+
+    connection = get_connection()
+    cursor = connection.cursor()
+
+    cursor.execute("""
+        SELECT
+            e.*,
+            u.first_name,
+            u.username
+
+        FROM deal_events e
+
+        LEFT JOIN users u
+            ON e.user_id = u.chat_id
+
+        WHERE e.deal_id = ?
+
+        ORDER BY e.event_id ASC
+    """, (
+        deal_id,
+    ))
+
+    events = cursor.fetchall()
+
+    connection.close()
+
+    return events
