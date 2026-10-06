@@ -3,10 +3,34 @@ from telebot import types
 from database.database import (
     get_leaderboard,
     get_total_user_deals,
-    get_mm_stats,
     get_total_users,
-    get_active_users
+    get_active_users,
+    get_connection
 )
+
+
+# ==========================================
+# GET MM TOTAL STATS
+# ==========================================
+
+def get_leaderboard_mm_stats():
+
+    connection = get_connection()
+    cursor = connection.cursor()
+
+    cursor.execute("""
+        SELECT
+            COUNT(*) AS total_deals,
+            COALESCE(SUM(deal_amount), 0) AS total_amount
+        FROM deals
+        WHERE status = 'completed'
+    """)
+
+    stats = cursor.fetchone()
+
+    connection.close()
+
+    return stats
 
 
 # ==========================================
@@ -16,8 +40,10 @@ from database.database import (
 def build_leaderboard():
 
     users = get_leaderboard(limit=20)
+
     total_user_deals = get_total_user_deals()
-    mm_stats = get_mm_stats()
+
+    mm_stats = get_leaderboard_mm_stats()
 
     total_users = get_total_users()
     active_users = get_active_users()
