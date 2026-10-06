@@ -12,10 +12,17 @@ from zoneinfo import ZoneInfo
 from database.database import (
     get_backup_data,
     restore_backup_data,
-    get_connection
+    get_connection,
+    get_daily_summary,
+    get_deals_by_date,
+    get_deal_events,
+    get_mm_stats,
+    get_total_users,
+    get_active_users
 )
 
 broadcast_waiting = set()
+
 
 # ==========================================
 # ADMIN PANEL KEYBOARD
@@ -48,6 +55,13 @@ def admin_panel_keyboard():
         )
     )
 
+    keyboard.add(
+        types.InlineKeyboardButton(
+            "📊 Detailed Stats",
+            callback_data="admin_stats"
+        )
+    )
+
     return keyboard
 
 
@@ -72,6 +86,47 @@ def backup_keyboard():
         types.InlineKeyboardButton(
             "📥 Restore Data",
             callback_data="restore_data"
+        )
+    )
+
+    keyboard.add(
+        types.InlineKeyboardButton(
+            "⬅️ Back",
+            callback_data="admin_panel_back"
+        )
+    )
+
+    return keyboard
+
+
+# ==========================================
+# STATS KEYBOARD
+# ==========================================
+
+def stats_keyboard():
+
+    keyboard = types.InlineKeyboardMarkup(
+        row_width=1
+    )
+
+    keyboard.add(
+        types.InlineKeyboardButton(
+            "📊 Today's Report",
+            callback_data="stats_today"
+        )
+    )
+
+    keyboard.add(
+        types.InlineKeyboardButton(
+            "📋 Deal History",
+            callback_data="stats_history"
+        )
+    )
+
+    keyboard.add(
+        types.InlineKeyboardButton(
+            "📈 Overall Statistics",
+            callback_data="stats_overall"
         )
     )
 
@@ -329,9 +384,6 @@ def register_admin_panel(bot):
             )
 
 
-    
-
-
     # ======================================
     # BROADCAST
     # ======================================
@@ -364,8 +416,9 @@ def register_admin_panel(bot):
             parse_mode="HTML"
         )
 
-        # Admin ko broadcast mode mein daalna
-        broadcast_waiting.add(call.from_user.id)
+        broadcast_waiting.add(
+            call.from_user.id
+        )
 
 
     # ======================================
@@ -390,7 +443,6 @@ def register_admin_panel(bot):
         if message.from_user.id not in ADMIN_IDS:
             return
 
-        # Broadcast mode remove
         broadcast_waiting.discard(
             message.from_user.id
         )
@@ -438,12 +490,7 @@ def register_admin_panel(bot):
                     f"Broadcast failed for {user_id}: {error}"
                 )
 
-            # Telegram flood limit se bachne ke liye
             time.sleep(0.05)
-
-        # ==================================
-        # RESULT
-        # ==================================
 
         bot.send_message(
             message.chat.id,
@@ -455,7 +502,7 @@ def register_admin_panel(bot):
             ),
             parse_mode="HTML"
         )
-    
+
 
     # ======================================
     # HELP
@@ -485,45 +532,307 @@ def register_admin_panel(bot):
 
                 "🤝 <code>.deal</code>\n"
                 "New deal start karne ke liye.\n\n"
-                
+
                 "🗑️ <code>.removedeal</code>\n"
                 "Pending/active deal remove karne ke liye.\n\n"
-                
-                
+
                 "📋 <code>.form</code>\n"
                 "Blank deal form ke liye.\n\n"
-                
-                
+
                 "⏸️ <code>.hold amount</code>\n"
                 "Payment hold karne ke liye.\n\n"
-                
-                
+
                 "📱 <code>.qr1</code> - <code>.qr10</code>\n"
                 "QR payment ke liye.\n\n"
-                
 
                 "💸 <code>.payment amount</code>\n"
                 "Payment complete karne ke liye.\n\n"
-                
+
                 "🧾 <code>.voucher amount</code>\n"
-                "Voucher generate karne ke liye.\n\n"                        
-                
-                
+                "Voucher generate karne ke liye.\n\n"
+
                 "⚙️ <code>/setfee</code>\n"
-"MM fee image set/update karne ke liye.\n\n"
+                "MM fee image set/update karne ke liye.\n\n"
 
                 "📱 <code>/setqr 1</code> - <code>/setqr 10</code>\n"
-"QR payment image set/update karne ke liye.\n\n"
+                "QR payment image set/update karne ke liye.\n\n"
 
                 "🧹 <code>/clean</code>\n"
-"GC members aur tracked messages clean karke new invite link generate karne ke liye.\n\n"
-                
-                
-                
+                "GC members aur tracked messages clean "
+                "karke new invite link generate karne ke liye.\n\n"
 
                 "🏆 <b>Leaderboard</b>\n"
                 "MM aur users ki deal statistics."
             ),
+            parse_mode="HTML"
+        )
+
+
+    # ======================================
+    # DETAILED STATS
+    # ======================================
+
+    @bot.callback_query_handler(
+        func=lambda call:
+        call.data == "admin_stats"
+    )
+    def admin_stats(call):
+
+        if call.from_user.id not in ADMIN_IDS:
+
+            bot.answer_callback_query(
+                call.id,
+                "❌ Access denied.",
+                show_alert=True
+            )
+            return
+
+        bot.answer_callback_query(call.id)
+
+        bot.edit_message_text(
+            (
+                "📊 <b>DETAILED STATISTICS</b>\n\n"
+                "Yahan se Rounak MM ki complete "
+                "payment aur deal activity check karo."
+            ),
+            call.message.chat.id,
+            call.message.message_id,
+            reply_markup=stats_keyboard(),
+            parse_mode="HTML"
+        )
+
+
+    # ======================================
+    # TODAY'S REPORT
+    # ======================================
+
+    @bot.callback_query_handler(
+        func=lambda call:
+        call.data == "stats_today"
+    )
+    def stats_today(call):
+
+        if call.from_user.id not in ADMIN_IDS:
+
+            bot.answer_callback_query(
+                call.id,
+                "❌ Access denied.",
+                show_alert=True
+            )
+            return
+
+        bot.answer_callback_query(call.id)
+
+        today = datetime.now().strftime(
+            "%Y-%m-%d"
+        )
+
+        stats = get_daily_summary(
+            today
+        )
+
+        def money(value):
+            return f"₹{float(value):g}"
+
+        text = (
+            "📊 <b>TODAY'S REPORT</b>\n\n"
+
+            f"📅 Date: <b>{stats['date']}</b>\n\n"
+
+            "🤝 <b>DEALS</b>\n"
+            f"• Created: <b>{stats['total_deals']}</b>\n"
+            f"• Completed: <b>{stats['completed_deals']}</b>\n"
+            f"• Pending: <b>{stats['pending_deals']}</b>\n\n"
+
+            "💰 <b>PAYMENT</b>\n"
+            f"• Deal Amount: <b>{money(stats['total_amount'])}</b>\n"
+            f"• Payment: <b>{money(stats['total_payment'])}</b>\n"
+            f"• Hold: <b>{money(stats['total_hold'])}</b>\n\n"
+
+            "💎 <b>MM</b>\n"
+            f"• MM Fee: <b>{money(stats['total_fee'])}</b>\n\n"
+
+            "💸 <b>FINAL TRANSACTIONS</b>\n"
+            f"• Release: <b>{money(stats['total_release'])}</b>\n"
+            f"• Refund: <b>{money(stats['total_refund'])}</b>"
+        )
+
+        keyboard = types.InlineKeyboardMarkup()
+
+        keyboard.add(
+            types.InlineKeyboardButton(
+                "⬅️ Back",
+                callback_data="admin_stats"
+            )
+        )
+
+        bot.edit_message_text(
+            text,
+            call.message.chat.id,
+            call.message.message_id,
+            reply_markup=keyboard,
+            parse_mode="HTML"
+        )
+
+
+    # ======================================
+    # OVERALL STATISTICS
+    # ======================================
+
+    @bot.callback_query_handler(
+        func=lambda call:
+        call.data == "stats_overall"
+    )
+    def stats_overall(call):
+
+        if call.from_user.id not in ADMIN_IDS:
+
+            bot.answer_callback_query(
+                call.id,
+                "❌ Access denied.",
+                show_alert=True
+            )
+            return
+
+        bot.answer_callback_query(call.id)
+
+        mm_stats = get_mm_stats()
+
+        total_users = get_total_users()
+        active_users = get_active_users()
+
+        total_deals = (
+            mm_stats["total_deals"]
+            if mm_stats
+            else 0
+        )
+
+        total_amount = (
+            mm_stats["total_amount"]
+            if mm_stats
+            else 0
+        )
+
+        text = (
+            "📈 <b>OVERALL STATISTICS</b>\n\n"
+
+            "🤝 <b>MM DEALS</b>\n"
+            f"• Total Deals: <b>{total_deals}</b>\n"
+            f"• Total Amount: <b>₹{float(total_amount):g}</b>\n\n"
+
+            "👥 <b>USERS</b>\n"
+            f"• Total Users: <b>{total_users}</b>\n"
+            f"• Active Users: <b>{active_users}</b>"
+        )
+
+        keyboard = types.InlineKeyboardMarkup()
+
+        keyboard.add(
+            types.InlineKeyboardButton(
+                "⬅️ Back",
+                callback_data="admin_stats"
+            )
+        )
+
+        bot.edit_message_text(
+            text,
+            call.message.chat.id,
+            call.message.message_id,
+            reply_markup=keyboard,
+            parse_mode="HTML"
+        )
+
+
+    # ======================================
+    # DEAL HISTORY
+    # ======================================
+
+    @bot.callback_query_handler(
+        func=lambda call:
+        call.data == "stats_history"
+    )
+    def stats_history(call):
+
+        if call.from_user.id not in ADMIN_IDS:
+
+            bot.answer_callback_query(
+                call.id,
+                "❌ Access denied.",
+                show_alert=True
+            )
+            return
+
+        bot.answer_callback_query(call.id)
+
+        today = datetime.now().strftime(
+            "%Y-%m-%d"
+        )
+
+        deals = get_deals_by_date(
+            today
+        )
+
+        if not deals:
+
+            text = (
+                "📋 <b>DEAL HISTORY</b>\n\n"
+                f"📅 {today}\n\n"
+                "❌ Aaj koi deal nahi mili."
+            )
+
+        else:
+
+            lines = [
+                "📋 <b>DEAL HISTORY</b>",
+                "",
+                f"📅 {today}",
+                ""
+            ]
+
+            for deal in deals:
+
+                status = (
+                    "✅ Completed"
+                    if deal["status"] == "completed"
+                    else "⏳ Pending"
+                )
+
+                lines.append(
+                    f"🤝 <b>Deal #{deal['deal_id']}</b>"
+                )
+
+                lines.append(
+                    f"💰 Amount: ₹{float(deal['deal_amount'] or 0):g}"
+                )
+
+                lines.append(
+                    f"📌 Status: {status}"
+                )
+
+                if deal["final_action"]:
+
+                    lines.append(
+                        f"⚡ Action: <b>{deal['final_action']}</b>"
+                    )
+
+                lines.append("")
+
+            text = "\n".join(lines)
+
+        keyboard = types.InlineKeyboardMarkup()
+
+        keyboard.add(
+            types.InlineKeyboardButton(
+                "⬅️ Back",
+                callback_data="admin_stats"
+            )
+        )
+
+        bot.edit_message_text(
+            text,
+            call.message.chat.id,
+            call.message.message_id,
+            reply_markup=keyboard,
             parse_mode="HTML"
         )
 
