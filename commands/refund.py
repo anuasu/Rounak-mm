@@ -2,7 +2,7 @@ from config import MM_CHAT_IDS, ADMIN_IDS
 
 from database.database import (
     get_active_deal,
-    record_refund
+    finalize_deal
 )
 
 from commands.command_utils import (
@@ -17,98 +17,13 @@ from commands.command_utils import (
 
 def user_mention(user_id, name):
 
-    name = name or "User"
+    safe_name = name or "User"
 
     return (
         f'<a href="tg://user?id={user_id}">'
-        f'{name}'
+        f'{safe_name}'
         f'</a>'
     )
-
-
-# ==========================================
-# FIND USER FROM REPLY / MENTION
-# ==========================================
-
-def get_target_user(bot, message, active_deal):
-
-    # --------------------------------------
-    # REPLY METHOD
-    # --------------------------------------
-
-    if message.reply_to_message:
-
-        replied_user = (
-            message.reply_to_message.from_user
-        )
-
-        if replied_user:
-
-            user_id = replied_user.id
-
-            if user_id in [
-                active_deal["user_1_id"],
-                active_deal["user_2_id"]
-            ]:
-                return user_id
-
-    # --------------------------------------
-    # MENTION METHOD
-    # --------------------------------------
-
-    entities = message.entities or []
-
-    for entity in entities:
-
-        if entity.type == "text_mention":
-
-            user = entity.user
-
-            if user:
-
-                user_id = user.id
-
-                if user_id in [
-                    active_deal["user_1_id"],
-                    active_deal["user_2_id"]
-                ]:
-                    return user_id
-
-        elif entity.type == "mention":
-
-            text = message.text or ""
-
-            username = text[
-                entity.offset:
-                entity.offset + entity.length
-            ].lstrip("@").lower()
-
-            for user_id in [
-                active_deal["user_1_id"],
-                active_deal["user_2_id"]
-            ]:
-
-                try:
-
-                    chat = bot.get_chat(user_id)
-
-                    chat_username = (
-                        chat.username or ""
-                    ).lower()
-
-                    if (
-                        chat_username
-                        and chat_username == username
-                    ):
-                        return user_id
-
-                except Exception as error:
-
-                    print(
-                        f"Refund username lookup error: {error}"
-                    )
-
-    return None
 
 
 # ==========================================
@@ -120,9 +35,9 @@ def register_refund(bot):
     @bot.message_handler(
         func=lambda message:
         message.text
-        and normalize_command(message.text)
-        .lower()
-        .startswith(".refund")
+        and normalize_command(
+            message.text
+        ).lower().startswith(".refund")
     )
     def refund_command(message):
 
@@ -133,7 +48,6 @@ def register_refund(bot):
         if message.from_user.id not in MM_CHAT_IDS:
 
             if message.from_user.id in ADMIN_IDS:
-
                 bot.reply_to(
                     message,
                     "⚠️ Sirf MM ye command use kar sakta hai."
@@ -150,6 +64,12 @@ def register_refund(bot):
             "supergroup"
         ]:
             return
+
+        command_text = normalize_command(
+            message.text
+        )
+
+        parts = command_text.split()
 
         # ==================================
         # ACTIVE DEAL
@@ -174,46 +94,23 @@ def register_refund(bot):
             return
 
         # ==================================
-        # CHECK HOLD
+        # AMOUNT CHECK
+        #
+        # .refund 500
+        # .refund ₹500
+        # .refund $100
         # ==================================
 
-        holding_amount = float(
-            active_deal["holding_amount"] or 0
-        )
-
-        if holding_amount <= 0:
-
-            bot.reply_to(
-                message,
-                "⚠️ Pehle payment ko hold karo."
-            )
-
-            delete_command_message(
-                bot,
-                message
-            )
-
-            return
-
-        # ==================================
-        # USER CHECK
-        # ==================================
-
-        target_user_id = get_target_user(
-            bot,
-            message,
-            active_deal
-        )
-
-        if not target_user_id:
+        if len(parts) != 2:
 
             bot.reply_to(
                 message,
                 (
-                    "⚠️ Refund kis user ko karna hai?\n\n"
-                    "User ko mention karo ya uske message par "
-                    "reply karke use karo.\n\n"
-                    "<code>.refund @username</code>"
+                    "⚠️ Refund amount do.\n\n"
+                    "Examples:\n"
+                    "<code>.refund 500</code>\n"
+                    "<code>.refund ₹500</code>\n"
+                    "<code>.refund $100</code>"
                 ),
                 parse_mode="HTML"
             )
@@ -225,18 +122,159 @@ def register_refund(bot):
 
             return
 
+        raw_amount = parts[1].strip()
+
         # ==================================
-        # GET USER NAME
+        # CURRENCY
+        # ==================================
+
+        currency = "₹"
+
+        if raw_amount.startswith("$"):
+
+            currency = "$"
+            raw_amount = raw_amount[1:]
+
+        elif raw_amount.startswith("₹"):
+
+            currency = "₹"
+            raw_amount = raw_amount[1:]
+
+        # ==================================
+        # AMOUNT
         # ==================================
 
         try:
 
-            target_user = bot.get_chat(
-                target_user_id
+            amount = float(raw_amount)
+
+        except ValueError:
+
+            bot.reply_to(
+                message,
+                "⚠️ Refund amount valid number hona chahiye."
             )
 
-            target_name = (
-                target_user.first_name
+            delete_command_message(
+                bot,
+                message
+            )
+
+            return
+
+        if amount <= 0:
+
+            bot.reply_to(
+                message,
+                "⚠️ Amount 0 se greater hona chahiye."
+            )
+
+            delete_command_message(
+                bot,
+                message
+            )
+
+            return
+
+        # ==================================
+        # REFUND USER
+        #
+        # Reply karke:
+        # .refund 500
+        # ==================================
+
+        if not message.reply_to_message:
+
+            bot.reply_to(
+                message,
+                (
+                    "⚠️ Jisko refund karna hai "
+                    "uske message ko reply karke command bhejo.\n\n"
+                    "Example:\n"
+                    "<code>.refund 500</code>"
+                ),
+                parse_mode="HTML"
+            )
+
+            delete_command_message(
+                bot,
+                message
+            )
+
+            return
+
+        refund_user = (
+            message.reply_to_message.from_user
+        )
+
+        if not refund_user:
+
+            bot.reply_to(
+                message,
+                "⚠️ Refund user identify nahi ho paya."
+            )
+
+            delete_command_message(
+                bot,
+                message
+            )
+
+            return
+
+        # ==================================
+        # CHECK USER IS IN DEAL
+        # ==================================
+
+        user_1_id = active_deal["user_1_id"]
+        user_2_id = active_deal["user_2_id"]
+
+        if refund_user.id not in [
+            user_1_id,
+            user_2_id
+        ]:
+
+            bot.reply_to(
+                message,
+                "⚠️ Ye user current deal ka part nahi hai."
+            )
+
+            delete_command_message(
+                bot,
+                message
+            )
+
+            return
+
+        # ==================================
+        # OTHER USER
+        # ==================================
+
+        if refund_user.id == user_1_id:
+            other_user_id = user_2_id
+        else:
+            other_user_id = user_1_id
+
+        # ==================================
+        # GET USER NAMES
+        # ==================================
+
+        try:
+
+            refund_chat = bot.get_chat(
+                refund_user.id
+            )
+
+            other_chat = bot.get_chat(
+                other_user_id
+            )
+
+            refund_name = (
+                refund_chat.first_name
+                or "User"
+            )
+
+            other_name = (
+                other_chat.first_name
                 or "User"
             )
 
@@ -246,28 +284,36 @@ def register_refund(bot):
                 f"Refund user lookup error: {error}"
             )
 
-            target_name = "User"
+            refund_name = (
+                refund_user.first_name
+                or "User"
+            )
 
-        mention = user_mention(
-            target_user_id,
-            target_name
-        )
+            other_name = "User"
 
         # ==================================
-        # REFUND
+        # FINALIZE DEAL
+        #
+        # Refund amount leaderboard par
+        # dono users ke account mein add hoga.
+        #
+        # Deal count bhi dono mein +1.
         # ==================================
 
-        success = record_refund(
+        success = finalize_deal(
             active_deal["deal_id"],
-            target_user_id,
-            holding_amount
+            "refund",
+            {
+                user_1_id: amount,
+                user_2_id: amount
+            }
         )
 
         if not success:
 
             bot.reply_to(
                 message,
-                "❌ Refund process failed."
+                "❌ Refund complete nahi ho saka. Deal already completed ho sakti hai."
             )
 
             delete_command_message(
@@ -278,49 +324,89 @@ def register_refund(bot):
             return
 
         # ==================================
-        # COMPLETE DEAL
+        # AMOUNT TEXT
         # ==================================
 
-        from database.database import complete_deal
+        amount_text = f"{currency}{amount:g}"
 
-        completed = complete_deal(
-            active_deal["deal_id"]
+        refund_mention = user_mention(
+            refund_user.id,
+            refund_name
         )
 
-        if not completed:
+        # ==================================
+        # MESSAGE 1 — REFUND SENT
+        # ==================================
 
-            bot.reply_to(
-                message,
-                "⚠️ Refund save ho gaya, lekin deal complete nahi ho payi."
+        refund_message = bot.send_message(
+            message.chat.id,
+            (
+                "↩️ <b>REFUND SENT</b>\n\n"
+                f"{amount_text} refunded to "
+                f"{refund_mention}.\n\n"
+                "Please drop voucher."
+            ),
+            parse_mode="HTML"
+        )
+
+        # ==================================
+        # PIN MESSAGE
+        # ==================================
+
+        try:
+
+            bot.pin_chat_message(
+                message.chat.id,
+                refund_message.message_id,
+                disable_notification=True
             )
 
-            delete_command_message(
-                bot,
-                message
+        except Exception as error:
+
+            print(
+                f"Refund pin error: {error}"
             )
 
-            return
-
         # ==================================
-        # FORMAT AMOUNT
-        # ==================================
-
-        amount_text = f"₹{holding_amount:g}"
-
-        # ==================================
-        # REFUND MESSAGE
+        # MESSAGE 2 — VOUCHER
         # ==================================
 
         bot.send_message(
             message.chat.id,
             (
-                f"↩️ <b>PAYMENT REFUNDED — {amount_text}</b>\n\n"
+                f"<code>I vouch @RounakMM "
+                f"for refund {amount_text}</code>"
+            ),
+            parse_mode="HTML"
+        )
 
-                f"💰 <b>{amount_text} REFUNDED</b>\n"
-                f"👤 <b>Receiver:</b> {mention}\n\n"
+        # ==================================
+        # MESSAGE 3 — VOUCHER REQUEST
+        # ==================================
 
-                "✅ <b>Refund completed successfully.</b>\n"
-                "📌 This deal is now closed."
+        bot.send_message(
+            message.chat.id,
+            (
+                f"{refund_mention}\n\n"
+                f"📩 <b>Please drop voucher "
+                f"for {amount_text}.</b>"
+            ),
+            parse_mode="HTML"
+        )
+
+        # ==================================
+        # MESSAGE 4 — DEAL INFO
+        # ==================================
+
+        bot.send_message(
+            message.chat.id,
+            (
+                "↩️ <b>REFUND COMPLETED</b>\n\n"
+                f"👤 <b>Refunded To:</b> {refund_mention}\n"
+                f"💰 <b>Refund Amount:</b> {amount_text}\n"
+                f"🤝 <b>Deal:</b> #{active_deal['deal_id']}\n\n"
+                "📊 Leaderboard updated.\n"
+                "✅ Deal completed."
             ),
             parse_mode="HTML"
         )
