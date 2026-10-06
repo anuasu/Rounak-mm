@@ -2,11 +2,44 @@ from telebot import types
 
 from database.database import (
     get_leaderboard,
-    get_mm_stats,
     get_total_user_deals,
     get_total_users,
-    get_active_users
+    get_active_users,
+    get_connection
 )
+
+
+# ==========================================
+# GET RAUNAK MM TOTAL STATS
+# ==========================================
+
+def get_leaderboard_mm_stats():
+
+    connection = get_connection()
+    cursor = connection.cursor()
+
+    cursor.execute("""
+        SELECT
+            total_deals,
+            total_amount
+        FROM leaderboard_stats
+        WHERE id = 1
+    """)
+
+    stats = cursor.fetchone()
+
+    connection.close()
+
+    if not stats:
+        return {
+            "total_deals": 0,
+            "total_amount": 0
+        }
+
+    return {
+        "total_deals": stats["total_deals"] or 0,
+        "total_amount": stats["total_amount"] or 0
+    }
 
 
 # ==========================================
@@ -15,33 +48,17 @@ from database.database import (
 
 def build_leaderboard():
 
-    # ======================================
-    # USER LEADERBOARD
-    # ======================================
-
     users = get_leaderboard(limit=20)
-
-    # ======================================
-    # TOTAL USER DEALS
-    # ======================================
 
     total_user_deals = get_total_user_deals()
 
-    # ======================================
-    # RAUNAK MM TOTAL STATS
-    # ======================================
-
-    mm_stats = get_mm_stats()
-
-    mm_total_deals = mm_stats.get("total_deals", 0)
-    mm_total_amount = mm_stats.get("total_amount", 0)
-
-    # ======================================
-    # COMMUNITY STATS
-    # ======================================
+    mm_stats = get_leaderboard_mm_stats()
 
     total_users = get_total_users()
     active_users = get_active_users()
+
+    mm_total_deals = mm_stats["total_deals"]
+    mm_total_amount = mm_stats["total_amount"]
 
     # ======================================
     # HEADER
