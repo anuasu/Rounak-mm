@@ -65,18 +65,14 @@ def register_refund(bot):
         ]:
             return
 
-        command_text = normalize_command(
-            message.text
-        )
-
-        parts = command_text.split()
+        group_id = message.chat.id
 
         # ==================================
         # ACTIVE DEAL
         # ==================================
 
         active_deal = get_active_deal(
-            message.chat.id
+            group_id
         )
 
         if not active_deal:
@@ -94,23 +90,32 @@ def register_refund(bot):
             return
 
         # ==================================
-        # AMOUNT CHECK
+        # COMMAND
         #
+        # .refund AMOUNT
+        #
+        # Example:
         # .refund 500
         # .refund ₹500
         # .refund $100
         # ==================================
+
+        command_text = normalize_command(
+            message.text
+        )
+
+        parts = command_text.split()
 
         if len(parts) != 2:
 
             bot.reply_to(
                 message,
                 (
-                    "⚠️ Refund amount do.\n\n"
-                    "Examples:\n"
-                    "<code>.refund 500</code>\n"
-                    "<code>.refund ₹500</code>\n"
-                    "<code>.refund $100</code>"
+                    "⚠️ Refund format galat hai.\n\n"
+                    "Use:\n"
+                    "<code>.refund AMOUNT</code>\n\n"
+                    "Example:\n"
+                    "<code>.refund 500</code>"
                 ),
                 parse_mode="HTML"
             )
@@ -122,11 +127,11 @@ def register_refund(bot):
 
             return
 
-        raw_amount = parts[1].strip()
+        # ==================================
+        # AMOUNT
+        # ==================================
 
-        # ==================================
-        # CURRENCY
-        # ==================================
+        raw_amount = parts[1].strip()
 
         currency = "₹"
 
@@ -137,16 +142,13 @@ def register_refund(bot):
 
         elif raw_amount.startswith("₹"):
 
-            currency = "₹"
             raw_amount = raw_amount[1:]
-
-        # ==================================
-        # AMOUNT
-        # ==================================
 
         try:
 
-            amount = float(raw_amount)
+            refund_amount = float(
+                raw_amount
+            )
 
         except ValueError:
 
@@ -162,7 +164,7 @@ def register_refund(bot):
 
             return
 
-        if amount <= 0:
+        if refund_amount <= 0:
 
             bot.reply_to(
                 message,
@@ -179,7 +181,7 @@ def register_refund(bot):
         # ==================================
         # REFUND USER
         #
-        # Reply karke:
+        # Reply to user's message:
         # .refund 500
         # ==================================
 
@@ -207,11 +209,11 @@ def register_refund(bot):
             message.reply_to_message.from_user
         )
 
-        if not refund_user:
+        if not refund_user or refund_user.is_bot:
 
             bot.reply_to(
                 message,
-                "⚠️ Refund user identify nahi ho paya."
+                "⚠️ Valid refund user select karo."
             )
 
             delete_command_message(
@@ -221,14 +223,20 @@ def register_refund(bot):
 
             return
 
+        refund_user_id = refund_user.id
+
         # ==================================
-        # CHECK USER IS IN DEAL
+        # DEAL USERS
         # ==================================
 
         user_1_id = active_deal["user_1_id"]
         user_2_id = active_deal["user_2_id"]
 
-        if refund_user.id not in [
+        # ==================================
+        # CHECK USER
+        # ==================================
+
+        if refund_user_id not in [
             user_1_id,
             user_2_id
         ]:
@@ -249,19 +257,22 @@ def register_refund(bot):
         # OTHER USER
         # ==================================
 
-        if refund_user.id == user_1_id:
+        if refund_user_id == user_1_id:
+
             other_user_id = user_2_id
+
         else:
+
             other_user_id = user_1_id
 
         # ==================================
-        # GET USER NAMES
+        # GET USER DETAILS
         # ==================================
 
         try:
 
             refund_chat = bot.get_chat(
-                refund_user.id
+                refund_user_id
             )
 
             other_chat = bot.get_chat(
@@ -294,18 +305,20 @@ def register_refund(bot):
         # ==================================
         # FINALIZE DEAL
         #
-        # Refund amount leaderboard par
-        # dono users ke account mein add hoga.
+        # BOTH USERS:
+        # + refund amount
+        # + 1 completed deal
         #
-        # Deal count bhi dono mein +1.
+        # Same leaderboard behaviour
+        # as previous .payment flow.
         # ==================================
 
         success = finalize_deal(
             active_deal["deal_id"],
             "refund",
             {
-                user_1_id: amount,
-                user_2_id: amount
+                user_1_id: refund_amount,
+                user_2_id: refund_amount
             }
         )
 
@@ -313,7 +326,10 @@ def register_refund(bot):
 
             bot.reply_to(
                 message,
-                "❌ Refund complete nahi ho saka. Deal already completed ho sakti hai."
+                (
+                    "❌ Refund complete nahi ho saka.\n"
+                    "Deal already completed ho sakti hai."
+                )
             )
 
             delete_command_message(
@@ -327,36 +343,50 @@ def register_refund(bot):
         # AMOUNT TEXT
         # ==================================
 
-        amount_text = f"{currency}{amount:g}"
-
-        refund_mention = user_mention(
-            refund_user.id,
-            refund_name
+        amount_text = (
+            f"{currency}{refund_amount:g}"
         )
 
         # ==================================
-        # MESSAGE 1 — REFUND SENT
+        # MENTIONS
+        # ==================================
+
+        refund_mention = user_mention(
+            refund_user_id,
+            refund_name
+        )
+
+        other_mention = user_mention(
+            other_user_id,
+            other_name
+        )
+
+        # ==================================
+        # MESSAGE 1
+        # REFUND SENT
         # ==================================
 
         refund_message = bot.send_message(
-            message.chat.id,
+            group_id,
             (
                 "↩️ <b>REFUND SENT</b>\n\n"
+
                 f"{amount_text} refunded to "
                 f"{refund_mention}.\n\n"
+
                 "Please drop voucher."
             ),
             parse_mode="HTML"
         )
 
         # ==================================
-        # PIN MESSAGE
+        # PIN REFUND MESSAGE
         # ==================================
 
         try:
 
             bot.pin_chat_message(
-                message.chat.id,
+                group_id,
                 refund_message.message_id,
                 disable_notification=True
             )
@@ -368,11 +398,12 @@ def register_refund(bot):
             )
 
         # ==================================
-        # MESSAGE 2 — VOUCHER
+        # MESSAGE 2
+        # VOUCHER
         # ==================================
 
         bot.send_message(
-            message.chat.id,
+            group_id,
             (
                 f"<code>I vouch @RounakMM "
                 f"for refund {amount_text}</code>"
@@ -381,13 +412,14 @@ def register_refund(bot):
         )
 
         # ==================================
-        # MESSAGE 3 — VOUCHER REQUEST
+        # MESSAGE 3
+        # VOUCHER REQUEST
         # ==================================
 
         bot.send_message(
-            message.chat.id,
+            group_id,
             (
-                f"{refund_mention}\n\n"
+                f"{refund_mention} {other_mention}\n\n"
                 f"📩 <b>Please drop voucher "
                 f"for {amount_text}.</b>"
             ),
@@ -395,16 +427,24 @@ def register_refund(bot):
         )
 
         # ==================================
-        # MESSAGE 4 — DEAL INFO
+        # MESSAGE 4
+        # REFUND INFO
         # ==================================
 
         bot.send_message(
-            message.chat.id,
+            group_id,
             (
                 "↩️ <b>REFUND COMPLETED</b>\n\n"
-                f"👤 <b>Refunded To:</b> {refund_mention}\n"
-                f"💰 <b>Refund Amount:</b> {amount_text}\n"
-                f"🤝 <b>Deal:</b> #{active_deal['deal_id']}\n\n"
+
+                f"👤 <b>Refunded To:</b> "
+                f"{refund_mention}\n"
+
+                f"💰 <b>Refund Amount:</b> "
+                f"{amount_text}\n"
+
+                f"🤝 <b>Deal:</b> "
+                f"#{active_deal['deal_id']}\n\n"
+
                 "📊 Leaderboard updated.\n"
                 "✅ Deal completed."
             ),
