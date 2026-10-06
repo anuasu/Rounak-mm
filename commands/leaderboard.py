@@ -2,35 +2,11 @@ from telebot import types
 
 from database.database import (
     get_leaderboard,
+    get_mm_stats,
     get_total_user_deals,
     get_total_users,
-    get_active_users,
-    get_connection
+    get_active_users
 )
-
-
-# ==========================================
-# GET MM TOTAL STATS
-# ==========================================
-
-def get_leaderboard_mm_stats():
-
-    connection = get_connection()
-    cursor = connection.cursor()
-
-    cursor.execute("""
-        SELECT
-            COUNT(*) AS total_deals,
-            COALESCE(SUM(deal_amount), 0) AS total_amount
-        FROM deals
-        WHERE status = 'completed'
-    """)
-
-    stats = cursor.fetchone()
-
-    connection.close()
-
-    return stats
 
 
 # ==========================================
@@ -39,17 +15,37 @@ def get_leaderboard_mm_stats():
 
 def build_leaderboard():
 
+    # ======================================
+    # USER LEADERBOARD
+    # ======================================
+
     users = get_leaderboard(limit=20)
+
+    # ======================================
+    # TOTAL USER DEALS
+    # ======================================
 
     total_user_deals = get_total_user_deals()
 
-    mm_stats = get_leaderboard_mm_stats()
+    # ======================================
+    # RAUNAK MM TOTAL STATS
+    # ======================================
+
+    mm_stats = get_mm_stats()
+
+    mm_total_deals = mm_stats.get("total_deals", 0)
+    mm_total_amount = mm_stats.get("total_amount", 0)
+
+    # ======================================
+    # COMMUNITY STATS
+    # ======================================
 
     total_users = get_total_users()
     active_users = get_active_users()
 
-    mm_total_deals = mm_stats["total_deals"] or 0
-    mm_total_amount = mm_stats["total_amount"] or 0
+    # ======================================
+    # HEADER
+    # ======================================
 
     text = (
         "🏆 <b>ROUNAK MM LEADERBOARD</b>\n\n"
@@ -69,6 +65,10 @@ def build_leaderboard():
         f"🤝 Total User Deals: <b>{total_user_deals}</b>\n\n"
     )
 
+    # ======================================
+    # EMPTY LEADERBOARD
+    # ======================================
+
     if not users:
 
         text += (
@@ -77,6 +77,10 @@ def build_leaderboard():
         )
 
         return text
+
+    # ======================================
+    # USERS
+    # ======================================
 
     text += "👥 <b>USERS</b>\n\n"
 
@@ -91,8 +95,10 @@ def build_leaderboard():
         )
 
         chat_id = user["chat_id"]
-        deals = user["completed_deals"]
-        amount = user["total_deal_amount"]
+
+        deals = user["completed_deals"] or 0
+
+        amount = user["total_deal_amount"] or 0
 
         text += (
             f"<b>#{position} {name}</b>\n"
