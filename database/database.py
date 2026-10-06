@@ -1471,6 +1471,10 @@ def get_daily_summary(date_text=None):
     if date_text is None:
         date_text = datetime.now().strftime("%Y-%m-%d")
 
+    # ======================================
+    # DEALS CREATED TODAY
+    # ======================================
+
     cursor.execute("""
         SELECT COUNT(*)
         FROM deals
@@ -1479,7 +1483,11 @@ def get_daily_summary(date_text=None):
         date_text,
     ))
 
-    total_deals = cursor.fetchone()[0]
+    total_deals = cursor.fetchone()[0] or 0
+
+    # ======================================
+    # DEAL AMOUNT
+    # ======================================
 
     cursor.execute("""
         SELECT COALESCE(SUM(deal_amount), 0)
@@ -1489,7 +1497,26 @@ def get_daily_summary(date_text=None):
         date_text,
     ))
 
-    total_amount = cursor.fetchone()[0]
+    total_amount = cursor.fetchone()[0] or 0
+
+    # ======================================
+    # PAYMENT EVENTS
+    # ======================================
+
+    cursor.execute("""
+        SELECT COALESCE(SUM(amount), 0)
+        FROM deal_events
+        WHERE DATE(event_time) = ?
+        AND event_type = 'payment'
+    """, (
+        date_text,
+    ))
+
+    total_payment = cursor.fetchone()[0] or 0
+
+    # ======================================
+    # HOLD
+    # ======================================
 
     cursor.execute("""
         SELECT COALESCE(SUM(amount), 0)
@@ -1500,18 +1527,29 @@ def get_daily_summary(date_text=None):
         date_text,
     ))
 
-    total_hold = cursor.fetchone()[0]
+    total_hold = cursor.fetchone()[0] or 0
+
+    # ======================================
+    # MM FEE
+    # ======================================
 
     cursor.execute("""
         SELECT COALESCE(SUM(mm_fee), 0)
         FROM deal_events
         WHERE DATE(event_time) = ?
-        AND event_type = 'hold'
+        AND event_type IN (
+            'payment',
+            'hold'
+        )
     """, (
         date_text,
     ))
 
-    total_fee = cursor.fetchone()[0]
+    total_fee = cursor.fetchone()[0] or 0
+
+    # ======================================
+    # RELEASE
+    # ======================================
 
     cursor.execute("""
         SELECT COALESCE(SUM(amount), 0)
@@ -1525,7 +1563,11 @@ def get_daily_summary(date_text=None):
         date_text,
     ))
 
-    total_release = cursor.fetchone()[0]
+    total_release = cursor.fetchone()[0] or 0
+
+    # ======================================
+    # REFUND
+    # ======================================
 
     cursor.execute("""
         SELECT COALESCE(SUM(amount), 0)
@@ -1539,43 +1581,61 @@ def get_daily_summary(date_text=None):
         date_text,
     ))
 
-    total_refund = cursor.fetchone()[0]
+    total_refund = cursor.fetchone()[0] or 0
+
+    # ======================================
+    # COMPLETED DEALS
+    # ======================================
+
+    cursor.execute("""
+        SELECT COUNT(*)
+        FROM deals
+        WHERE DATE(completed_at) = ?
+        AND status = 'completed'
+    """, (
+        date_text,
+    ))
+
+    completed_deals = cursor.fetchone()[0] or 0
+
+    # ======================================
+    # PENDING DEALS
+    # ======================================
+
+    cursor.execute("""
+        SELECT COUNT(*)
+        FROM deals
+        WHERE status = 'pending'
+    """)
+
+    pending_deals = cursor.fetchone()[0] or 0
 
     connection.close()
 
     return {
         "date": date_text,
-        "total_deals": total_deals or 0,
-        "total_amount": total_amount or 0,
-        "total_hold": total_hold or 0,
-        "total_fee": total_fee or 0,
-        "total_release": total_release or 0,
-        "total_refund": total_refund or 0
+
+        "total_deals": total_deals,
+
+        "completed_deals": completed_deals,
+
+        "pending_deals": pending_deals,
+
+        "total_amount": total_amount,
+
+        "total_payment": total_payment,
+
+        "total_hold": total_hold,
+
+        "total_fee": total_fee,
+
+        "total_release": total_release,
+
+        "total_refund": total_refund
     }
 
 
-# ==========================================
-# RAUNAK MM TOTAL STATS
-# ==========================================
 
-def get_mm_stats():
-
-    connection = get_connection()
-    cursor = connection.cursor()
-
-    cursor.execute("""
-        SELECT
-            total_deals,
-            total_amount
-        FROM leaderboard_stats
-        WHERE id = 1
-    """)
-
-    stats = cursor.fetchone()
-
-    connection.close()
-
-    return stats
 
 
 # ==========================================
