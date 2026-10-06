@@ -31,6 +31,10 @@ from commands.clean import (
 )
 from commands.refund import register_refund
 
+from commands.split import register_split
+
+
+
 # DATABASE
 init_database()
 
@@ -62,6 +66,9 @@ register_hold(bot)
 # RELEASE
 register_release(bot)
 register_refund(bot)
+register_split(bot)
+
+
 register_voucher(bot)
 register_form(bot)
 
