@@ -29,32 +29,20 @@ from commands.clean import (
     register_clean,
     install_message_tracker
 )
+from commands.refund import register_refund
 
-
-# ==========================================
 # DATABASE
-# ==========================================
-
 init_database()
 
 
-# ==========================================
 # BOT
-# ==========================================
-
 bot = telebot.TeleBot(BOT_TOKEN)
 
 
-# ==========================================
 # CLEAN MESSAGE TRACKER
-# ==========================================
-
 install_message_tracker(bot)
 
-
-# ==========================================
 # HANDLERS
-# ==========================================
 
 register_start_handlers(bot)
 register_user_message(bot)
@@ -73,29 +61,21 @@ register_hold(bot)
 
 # RELEASE
 register_release(bot)
-
+register_refund(bot)
 register_voucher(bot)
 register_form(bot)
 
-
-# ==========================================
 # ADMIN PANEL
-# ==========================================
-
 register_admin_panel(bot)
 start_automatic_backup(bot)
 
 
-# ==========================================
-# CLEAN
-# ==========================================
 
+# CLEAN
 register_clean(bot)
 
 
-# ==========================================
 # START BOT
-# ==========================================
 
 print("🤖 Rounak MM Bot is starting...")
 
