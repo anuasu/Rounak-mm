@@ -1329,6 +1329,39 @@ def get_total_user_deals():
 
     return total
 
+# ==========================================
+# RAUNAK MM TOTAL STATS
+# ==========================================
+
+def get_mm_stats():
+
+    connection = get_connection()
+    cursor = connection.cursor()
+
+    cursor.execute("""
+        SELECT
+            total_deals,
+            total_amount
+        FROM leaderboard_stats
+        WHERE id = 1
+    """)
+
+    stats = cursor.fetchone()
+
+    connection.close()
+
+    if not stats:
+        return {
+            "total_deals": 0,
+            "total_amount": 0
+        }
+
+    return {
+        "total_deals": stats["total_deals"] or 0,
+        "total_amount": stats["total_amount"] or 0
+    }
+
+
 
 # ==========================================
 # GET USER DEAL HISTORY
