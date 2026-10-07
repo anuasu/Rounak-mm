@@ -12,17 +12,17 @@ from commands.command_utils import (
 )
 
 
-# ==========================================
-# TEMPORARY SPLIT DATA
+# ==========================================================
+# TEMPORARY SPLIT STATE
 # group_id -> split data
-# ==========================================
+# ==========================================================
 
 pending_split = {}
 
 
-# ==========================================
+# ==========================================================
 # USER MENTION
-# ==========================================
+# ==========================================================
 
 def user_mention(user_id, name):
 
@@ -35,9 +35,9 @@ def user_mention(user_id, name):
     )
 
 
-# ==========================================
+# ==========================================================
 # PARSE AMOUNT
-# ==========================================
+# ==========================================================
 
 def parse_amount(text):
 
@@ -57,7 +57,7 @@ def parse_amount(text):
 
     try:
         amount = float(raw)
-    except ValueError:
+    except (ValueError, TypeError):
         return None, None
 
     if amount <= 0:
@@ -66,56 +66,61 @@ def parse_amount(text):
     return amount, currency
 
 
-# ==========================================
+# ==========================================================
 # FORMAT AMOUNT
-# ==========================================
+# ==========================================================
 
 def format_amount(amount, currency="₹"):
-
     return f"{currency}{amount:g}"
 
 
-# ==========================================
+# ==========================================================
 # GET DEAL USER
-# ==========================================
+# ==========================================================
 
 def get_deal_user(active_deal, user_id):
 
-    if user_id == active_deal["user_1_id"]:
+    if not active_deal:
+        return None
 
-        return get_user(
-            active_deal["user_1_id"]
-        )
+    if user_id == active_deal["user_1_id"]:
+        return get_user(user_id)
 
     if user_id == active_deal["user_2_id"]:
-
-        return get_user(
-            active_deal["user_2_id"]
-        )
+        return get_user(user_id)
 
     return None
 
 
-# ==========================================
+# ==========================================================
+# CHECK MM
+# ==========================================================
+
+def is_mm(message):
+
+    return message.from_user.id in MM_CHAT_IDS
+
+
+# ==========================================================
 # START SPLIT
-# ==========================================
+# ==========================================================
 
 def register_split(bot):
 
     @bot.message_handler(
-        func=lambda message:
-        message.text
-        and normalize_command(
+        func=lambda message: (
             message.text
-        ).lower() == ".split"
+            and normalize_command(message.text).strip().lower()
+            == ".split"
+        )
     )
     def split_command(message):
 
-        # ==================================
+        # ------------------------------------------------------
         # MM ONLY
-        # ==================================
+        # ------------------------------------------------------
 
-        if message.from_user.id not in MM_CHAT_IDS:
+        if not is_mm(message):
 
             if message.from_user.id in ADMIN_IDS:
 
@@ -126,26 +131,23 @@ def register_split(bot):
 
             return
 
-        # ==================================
+        # ------------------------------------------------------
         # GROUP ONLY
-        # ==================================
+        # ------------------------------------------------------
 
-        if message.chat.type not in [
+        if message.chat.type not in (
             "group",
             "supergroup"
-        ]:
-
+        ):
             return
 
         group_id = message.chat.id
 
-        # ==================================
+        # ------------------------------------------------------
         # ACTIVE DEAL
-        # ==================================
+        # ------------------------------------------------------
 
-        active_deal = get_active_deal(
-            group_id
-        )
+        active_deal = get_active_deal(group_id)
 
         if not active_deal:
 
@@ -154,31 +156,34 @@ def register_split(bot):
                 "⚠️ Is group mein koi active deal nahi hai."
             )
 
-            delete_command_message(
-                bot,
-                message
-            )
+            delete_command_message(bot, message)
 
             return
 
-        # ==================================
-        # RESET OLD/BROKEN STATE
-        # ==================================
+        # ------------------------------------------------------
+        # RESET STALE STATE
+        # ------------------------------------------------------
 
-        old_data = pending_split.get(
-            group_id
-        )
+        old = pending_split.get(group_id)
 
-        if old_data:
+        if old:
 
-            # Same active deal already running
-            if old_data.get("deal_id") == active_deal["deal_id"]:
+            if old.get("deal_id") != active_deal["deal_id"]:
+
+                pending_split.pop(
+                    group_id,
+                    None
+                )
+
+            else:
 
                 bot.reply_to(
                     message,
                     (
                         "⚠️ Split already setup hai.\n\n"
-                        "Pehle bot ke next step ko complete karo."
+                        "Ab .split dobara mat likho.\n"
+                        "Bot ke message ke according "
+                        "user ke message ko reply karke amount bhejo."
                     )
                 )
 
@@ -189,23 +194,18 @@ def register_split(bot):
 
                 return
 
-            # Old deal state
-            pending_split.pop(
-                group_id,
-                None
-            )
-
-        # ==================================
-        # START NEW SPLIT
-        # ==================================
+        # ------------------------------------------------------
+        # CREATE STATE
+        # ------------------------------------------------------
 
         pending_split[group_id] = {
-
             "deal_id": active_deal["deal_id"],
-
             "step": "release"
-
         }
+
+        # ------------------------------------------------------
+        # ASK RELEASE
+        # ------------------------------------------------------
 
         bot.send_message(
             group_id,
@@ -218,8 +218,8 @@ def register_split(bot):
                 "Example:\n"
                 "<code>120</code>\n\n"
 
-                "⚠️ <code>.split</code> dobara likhne ki "
-                "zaroorat nahi hai."
+                "⚠️ <code>.split</code> dobara likhne "
+                "ki zaroorat nahi hai."
             ),
             parse_mode="HTML"
         )
@@ -230,46 +230,44 @@ def register_split(bot):
         )
 
 
-# ==========================================
-# HANDLE SPLIT REPLY
-# ==========================================
+# ==========================================================
+# HANDLE REPLY AMOUNTS
+# ==========================================================
 
 def register_split_input(bot):
 
     @bot.message_handler(
-        func=lambda message:
-        message.chat.type in [
-            "group",
-            "supergroup"
-        ]
-        and message.chat.id in pending_split
-        and message.text
+        func=lambda message: (
+            message.chat.type in (
+                "group",
+                "supergroup"
+            )
+            and message.chat.id in pending_split
+            and message.text is not None
+            and message.reply_to_message is not None
+        )
     )
-    def split_input(message):
+    def split_reply_handler(message):
 
-        # ==================================
+        # ======================================================
         # MM ONLY
-        # ==================================
+        # ======================================================
 
-        if message.from_user.id not in MM_CHAT_IDS:
+        if not is_mm(message):
             return
 
         group_id = message.chat.id
 
-        data = pending_split.get(
-            group_id
-        )
+        data = pending_split.get(group_id)
 
         if not data:
             return
 
-        # ==================================
-        # ACTIVE DEAL
-        # ==================================
+        # ======================================================
+        # GET ACTIVE DEAL
+        # ======================================================
 
-        active_deal = get_active_deal(
-            group_id
-        )
+        active_deal = get_active_deal(group_id)
 
         if not active_deal:
 
@@ -280,14 +278,11 @@ def register_split_input(bot):
 
             return
 
-        # ==================================
-        # DEAL CHANGED
-        # ==================================
+        # ======================================================
+        # DEAL CHECK
+        # ======================================================
 
-        if (
-            data.get("deal_id")
-            != active_deal.get("deal_id")
-        ):
+        if data.get("deal_id") != active_deal.get("deal_id"):
 
             pending_split.pop(
                 group_id,
@@ -296,35 +291,25 @@ def register_split_input(bot):
 
             return
 
-        # ==================================
-        # ONLY PROCESS REPLY
-        # ==================================
+        # ======================================================
+        # GET REPLIED USER
+        # ======================================================
 
-        if not message.reply_to_message:
+        replied_message = message.reply_to_message
 
-            return
-
-        # ==================================
-        # BOT/INVALID REPLY CHECK
-        # ==================================
-
-        replied_user = (
-            message.reply_to_message.from_user
-        )
+        replied_user = replied_message.from_user
 
         if not replied_user:
-
             return
 
         if replied_user.is_bot:
-
             return
 
         replied_user_id = replied_user.id
 
-        # ==================================
-        # AMOUNT
-        # ==================================
+        # ======================================================
+        # PARSE AMOUNT
+        # ======================================================
 
         amount, currency = parse_amount(
             message.text
@@ -335,7 +320,7 @@ def register_split_input(bot):
             bot.reply_to(
                 message,
                 (
-                    "⚠️ Sirf valid amount bhejo.\n\n"
+                    "⚠️ Sirf amount bhejo.\n\n"
                     "Example:\n"
                     "<code>120</code>"
                 ),
@@ -344,15 +329,11 @@ def register_split_input(bot):
 
             return
 
-        # ==================================
+        # ======================================================
         # RELEASE STEP
-        # ==================================
+        # ======================================================
 
         if data.get("step") == "release":
-
-            # ------------------------------
-            # CHECK USER IS IN DEAL
-            # ------------------------------
 
             release_user = get_deal_user(
                 active_deal,
@@ -364,8 +345,9 @@ def register_split_input(bot):
                 bot.reply_to(
                     message,
                     (
-                        "⚠️ Jis user ko reply kiya hai "
-                        "wo current deal ka part nahi hai."
+                        "⚠️ Jis user ke message ko "
+                        "reply kiya hai, wo current deal "
+                        "ka part nahi hai."
                     )
                 )
 
@@ -377,9 +359,9 @@ def register_split_input(bot):
                 or "User"
             )
 
-            # ------------------------------
+            # --------------------------------------------------
             # SAVE RELEASE
-            # ------------------------------
+            # --------------------------------------------------
 
             pending_split[group_id] = {
 
@@ -402,9 +384,9 @@ def register_split_input(bot):
                     "refund"
             }
 
-            # ------------------------------
+            # --------------------------------------------------
             # ASK REFUND
-            # ------------------------------
+            # --------------------------------------------------
 
             bot.send_message(
                 group_id,
@@ -430,276 +412,244 @@ def register_split_input(bot):
 
             return
 
-        # ==================================
+        # ======================================================
         # REFUND STEP
-        # ==================================
+        # ======================================================
 
-        if data.get("step") == "refund":
+        if data.get("step") != "refund":
+            return
 
-            # ------------------------------
-            # CHECK REFUND USER
-            # ------------------------------
+        refund_user = get_deal_user(
+            active_deal,
+            replied_user_id
+        )
 
-            refund_user = get_deal_user(
-                active_deal,
-                replied_user_id
-            )
+        if not refund_user:
 
-            if not refund_user:
-
-                bot.reply_to(
-                    message,
-                    (
-                        "⚠️ Jis user ko reply kiya hai "
-                        "wo current deal ka part nahi hai."
-                    )
-                )
-
-                return
-
-            refund_user_id = replied_user_id
-
-            # ------------------------------
-            # SAME USER CHECK
-            # ------------------------------
-
-            if (
-                refund_user_id
-                == data["release_user_id"]
-            ):
-
-                bot.reply_to(
-                    message,
-                    (
-                        "⚠️ Release aur refund user "
-                        "same nahi ho sakte."
-                    )
-                )
-
-                return
-
-            refund_name = (
-                refund_user["first_name"]
-                or replied_user.first_name
-                or "User"
-            )
-
-            # ==================================
-            # RECORD SPLIT
-            # ==================================
-
-            success = record_split(
-
-                deal_id=data["deal_id"],
-
-                refund_user_id=
-                    refund_user_id,
-
-                refund_amount=
-                    amount,
-
-                release_user_id=
-                    data["release_user_id"],
-
-                release_amount=
-                    data["release_amount"]
-            )
-
-            if not success:
-
-                bot.reply_to(
-                    message,
-                    (
-                        "❌ Split complete nahi ho saka.\n"
-                        "Deal already completed ho sakti hai."
-                    )
-                )
-
-                pending_split.pop(
-                    group_id,
-                    None
-                )
-
-                return
-
-            # ==================================
-            # TOTAL VOUCHER AMOUNT
-            # ==================================
-
-            release_amount = data[
-                "release_amount"
-            ]
-
-            refund_amount = amount
-
-            total_amount = (
-                release_amount
-                + refund_amount
-            )
-
-            # ==================================
-            # CURRENCY
-            # ==================================
-
-            final_currency = (
-                currency
-                or data.get(
-                    "currency",
-                    "₹"
+            bot.reply_to(
+                message,
+                (
+                    "⚠️ Jis user ke message ko "
+                    "reply kiya hai, wo current deal "
+                    "ka part nahi hai."
                 )
             )
 
-            release_amount_text = (
-                format_amount(
-                    release_amount,
-                    final_currency
-                )
+            return
+
+        refund_user_id = replied_user_id
+
+        # ======================================================
+        # SAME USER
+        # ======================================================
+
+        if refund_user_id == data["release_user_id"]:
+
+            bot.reply_to(
+                message,
+                "⚠️ Release aur refund user same nahi ho sakte."
             )
 
-            refund_amount_text = (
-                format_amount(
-                    refund_amount,
-                    final_currency
+            return
+
+        refund_name = (
+            refund_user["first_name"]
+            or replied_user.first_name
+            or "User"
+        )
+
+        # ======================================================
+        # RECORD SPLIT
+        # ======================================================
+
+        success = record_split(
+
+            deal_id=data["deal_id"],
+
+            refund_user_id=refund_user_id,
+
+            refund_amount=amount,
+
+            release_user_id=data["release_user_id"],
+
+            release_amount=data["release_amount"]
+        )
+
+        if not success:
+
+            bot.reply_to(
+                message,
+                (
+                    "❌ Split complete nahi ho saka.\n"
+                    "Deal already completed ho sakti hai."
                 )
             )
-
-            total_amount_text = (
-                format_amount(
-                    total_amount,
-                    final_currency
-                )
-            )
-
-            # ==================================
-            # CLEAR STATE
-            # ==================================
 
             pending_split.pop(
                 group_id,
                 None
             )
 
-            # ==================================
-            # MENTIONS
-            # ==================================
-
-            release_mention = user_mention(
-                data["release_user_id"],
-                data["release_user_name"]
-            )
-
-            refund_mention = user_mention(
-                refund_user_id,
-                refund_name
-            )
-
-            # ==================================
-            # PAYMENT MESSAGE
-            # ==================================
-
-            payment_message = bot.send_message(
-                group_id,
-                (
-                    "💸 <b>MMD PAYMENT</b>\n\n"
-
-                    f"💰 {release_amount_text} → "
-                    f"{release_mention}\n"
-
-                    f"↩️ {refund_amount_text} → "
-                    f"{refund_mention}\n\n"
-
-                    f"💵 <b>Total: "
-                    f"{total_amount_text}</b>\n\n"
-
-                    "Please drop voucher."
-                ),
-                parse_mode="HTML"
-            )
-
-            # ==================================
-            # PIN PAYMENT
-            # ==================================
-
-            try:
-
-                bot.pin_chat_message(
-                    group_id,
-                    payment_message.message_id,
-                    disable_notification=True
-                )
-
-            except Exception as error:
-
-                print(
-                    f"Split pin error: {error}"
-                )
-
-            # ==================================
-            # COMBINED VOUCHER
-            # ==================================
-
-            bot.send_message(
-                group_id,
-                (
-                    f"<code>I vouch @RounakMM "
-                    f"for MMD payment "
-                    f"{total_amount_text}</code>"
-                ),
-                parse_mode="HTML"
-            )
-
-            # ==================================
-            # VOUCHER REQUEST
-            # ==================================
-
-            bot.send_message(
-                group_id,
-                (
-                    f"{release_mention} "
-                    f"{refund_mention}\n\n"
-
-                    f"📩 <b>Please drop voucher "
-                    f"for {total_amount_text}.</b>"
-                ),
-                parse_mode="HTML"
-            )
-
-            # ==================================
-            # SPLIT INFORMATION
-            # ==================================
-
-            bot.send_message(
-                group_id,
-                (
-                    "✂️ <b>SPLIT COMPLETED</b>\n\n"
-
-                    f"💸 <b>Release:</b> "
-                    f"{release_mention} — "
-                    f"{release_amount_text}\n"
-
-                    f"↩️ <b>Refund:</b> "
-                    f"{refund_mention} — "
-                    f"{refund_amount_text}\n\n"
-
-                    f"💰 <b>Total MMD Payment:</b> "
-                    f"{total_amount_text}\n\n"
-
-                    f"🤝 <b>Deal:</b> "
-                    f"#{data['deal_id']}\n\n"
-
-                    "📊 Leaderboard updated.\n"
-                    "✅ Deal completed."
-                ),
-                parse_mode="HTML"
-            )
-
-            # ==================================
-            # DELETE AMOUNT MESSAGE
-            # ==================================
-
-            delete_command_message(
-                bot,
-                message
-            )
-
             return
+
+        # ======================================================
+        # TOTAL
+        # ======================================================
+
+        release_amount = data["release_amount"]
+        refund_amount = amount
+
+        total_amount = (
+            release_amount
+            + refund_amount
+        )
+
+        final_currency = (
+            currency
+            or data.get("currency")
+            or "₹"
+        )
+
+        release_text = format_amount(
+            release_amount,
+            final_currency
+        )
+
+        refund_text = format_amount(
+            refund_amount,
+            final_currency
+        )
+
+        total_text = format_amount(
+            total_amount,
+            final_currency
+        )
+
+        # ======================================================
+        # CLEAR STATE
+        # ======================================================
+
+        pending_split.pop(
+            group_id,
+            None
+        )
+
+        # ======================================================
+        # MENTIONS
+        # ======================================================
+
+        release_mention = user_mention(
+            data["release_user_id"],
+            data["release_user_name"]
+        )
+
+        refund_mention = user_mention(
+            refund_user_id,
+            refund_name
+        )
+
+        # ======================================================
+        # PAYMENT
+        # ======================================================
+
+        payment_message = bot.send_message(
+            group_id,
+            (
+                "💸 <b>MMD PAYMENT</b>\n\n"
+
+                f"💰 {release_text} → "
+                f"{release_mention}\n"
+
+                f"↩️ {refund_text} → "
+                f"{refund_mention}\n\n"
+
+                f"💵 <b>Total: {total_text}</b>\n\n"
+
+                "Please drop voucher."
+            ),
+            parse_mode="HTML"
+        )
+
+        # ======================================================
+        # PIN
+        # ======================================================
+
+        try:
+
+            bot.pin_chat_message(
+                group_id,
+                payment_message.message_id,
+                disable_notification=True
+            )
+
+        except Exception as error:
+
+            print(
+                f"Split pin error: {error}"
+            )
+
+        # ======================================================
+        # VOUCHER
+        # ======================================================
+
+        bot.send_message(
+            group_id,
+            (
+                f"<code>I vouch @RounakMM "
+                f"for MMD payment "
+                f"{total_text}</code>"
+            ),
+            parse_mode="HTML"
+        )
+
+        # ======================================================
+        # VOUCHER REQUEST
+        # ======================================================
+
+        bot.send_message(
+            group_id,
+            (
+                f"{release_mention} "
+                f"{refund_mention}\n\n"
+
+                f"📩 <b>Please drop voucher "
+                f"for {total_text}.</b>"
+            ),
+            parse_mode="HTML"
+        )
+
+        # ======================================================
+        # SPLIT INFO
+        # ======================================================
+
+        bot.send_message(
+            group_id,
+            (
+                "✂️ <b>SPLIT COMPLETED</b>\n\n"
+
+                f"💸 <b>Release:</b> "
+                f"{release_mention} — {release_text}\n"
+
+                f"↩️ <b>Refund:</b> "
+                f"{refund_mention} — {refund_text}\n\n"
+
+                f"💰 <b>Total MMD Payment:</b> "
+                f"{total_text}\n\n"
+
+                f"🤝 <b>Deal:</b> "
+                f"#{data['deal_id']}\n\n"
+
+                "📊 Leaderboard updated.\n"
+                "✅ Deal completed."
+            ),
+            parse_mode="HTML"
+        )
+
+        # ======================================================
+        # DELETE AMOUNT MESSAGE
+        # ======================================================
+
+        delete_command_message(
+            bot,
+            message
+        )
