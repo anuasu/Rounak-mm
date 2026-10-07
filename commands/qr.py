@@ -1,3 +1,5 @@
+import re
+
 from config import MM_CHAT_IDS, ADMIN_IDS
 
 from database.database import (
@@ -67,83 +69,10 @@ def user_mention(user_id, name):
 
 
 # ==========================================
-# QR COMMAND PARSER
-# ==========================================
-
-def parse_qr_command(text):
-
-    if not text:
-        return None, None
-
-    text = text.strip()
-
-    # --------------------------------------
-    # NORMALIZE
-    #
-    # .qr1 500
-    # . qr1 500
-    #
-    # Both become:
-    # .qr1 500
-    # --------------------------------------
-
-    if text.lower().startswith(". qr"):
-        text = "." + text[2:].lstrip()
-
-    parts = text.split()
-
-    if not parts:
-        return None, None
-
-    command = parts[0].lower()
-
-    # --------------------------------------
-    # MUST BE .qr1 - .qr10
-    # --------------------------------------
-
-    if not command.startswith(".qr"):
-        return None, None
-
-    qr_number_text = command[3:]
-
-    if not qr_number_text.isdigit():
-        return None, None
-
-    qr_number = int(qr_number_text)
-
-    if qr_number < 1 or qr_number > 10:
-        return None, None
-
-    # --------------------------------------
-    # AMOUNT
-    # --------------------------------------
-
-    if len(parts) != 2:
-        return qr_number, None
-
-    amount_text = (
-        parts[1]
-        .replace("₹", "")
-        .strip()
-    )
-
-    try:
-
-        amount = float(amount_text)
-
-    except ValueError:
-
-        return qr_number, None
-
-    return qr_number, amount
-
-
-# ==========================================
 # REGISTER QR
 # ==========================================
 
 def register_qr(bot):
-
 
     # ======================================
     # /setqr 1 ... /setqr 10
@@ -237,20 +166,12 @@ def register_qr(bot):
 
     def receive_qr_image(message, qr_number):
 
-        # ----------------------------------
-        # PERMISSION
-        # ----------------------------------
-
         if (
             message.from_user.id not in MM_CHAT_IDS
             and
             message.from_user.id not in ADMIN_IDS
         ):
             return
-
-        # ----------------------------------
-        # PHOTO CHECK
-        # ----------------------------------
 
         if not message.photo:
 
@@ -306,8 +227,8 @@ def register_qr(bot):
                 "Please share your <b>UPI ID</b>.\n\n"
                 "Example:\n"
                 "<code>yourname@upi</code>\n\n"
-                "Or tap the button below if you don't "
-                "want to add a UPI ID."
+                "Or tap the button below if you don't want "
+                "to add a UPI ID."
             ),
             parse_mode="HTML",
             reply_markup=markup
@@ -331,18 +252,7 @@ def register_qr(bot):
     def receive_upi(message, qr_number):
 
         # ----------------------------------
-        # PERMISSION
-        # ----------------------------------
-
-        if (
-            message.from_user.id not in MM_CHAT_IDS
-            and
-            message.from_user.id not in ADMIN_IDS
-        ):
-            return
-
-        # ----------------------------------
-        # TEXT CHECK
+        # BUTTON / NON TEXT
         # ----------------------------------
 
         if not message.text:
@@ -490,17 +400,23 @@ def register_qr(bot):
     # ======================================
     # .qr1 ... .qr10
     #
-    # ALSO:
-    # . qr1 ... . qr10
+    # SUPPORTED:
+    #
+    # .qr1 500
+    # . qr1 500
+    # .  qr1 500
+    # .   QR1   500
+    # .qr10 1000
+    #
     # ======================================
 
     @bot.message_handler(
         func=lambda message:
         message.text
-        and (
-            message.text.strip().lower().startswith(".qr")
-            or
-            message.text.strip().lower().startswith(". qr")
+        and re.match(
+            r"^\s*\.\s*qr\s*(?:[1-9]|10)\s+",
+            message.text,
+            re.IGNORECASE
         )
     )
     def qr_payment_command(message):
@@ -531,34 +447,34 @@ def register_qr(bot):
             return
 
         # ----------------------------------
-        # PARSE COMMAND
+        # ORIGINAL TEXT
         # ----------------------------------
 
-        qr_number, amount = parse_qr_command(
-            message.text
+        text = message.text.strip()
+
+        # ----------------------------------
+        # PARSE COMMAND
+        #
+        # .qr1 500
+        # . qr1 500
+        # .  qr1 500
+        # .   QR1   500
+        # ----------------------------------
+
+        match = re.match(
+            r"^\s*\.\s*qr\s*(1|2|3|4|5|6|7|8|9|10)\s+(.+?)\s*$",
+            text,
+            re.IGNORECASE
         )
 
-        if qr_number is None:
+        if not match:
             return
 
-        # ----------------------------------
-        # AMOUNT ERROR
-        # ----------------------------------
+        qr_number = int(
+            match.group(1)
+        )
 
-        if amount is None:
-
-            bot.reply_to(
-                message,
-                (
-                    "⚠️ Amount do.\n\n"
-                    "Example:\n"
-                    f"<code>.qr{qr_number} 500</code>\n"
-                    f"<code>. qr{qr_number} 500</code>"
-                ),
-                parse_mode="HTML"
-            )
-
-            return
+        raw_amount = match.group(2).strip()
 
         # ----------------------------------
         # DELETE COMMAND
@@ -576,6 +492,32 @@ def register_qr(bot):
             print(
                 f"QR command delete error: {error}"
             )
+
+        # ----------------------------------
+        # AMOUNT
+        # ----------------------------------
+
+        raw_amount = (
+            raw_amount
+            .replace("₹", "")
+            .replace(",", "")
+            .strip()
+        )
+
+        try:
+
+            amount = float(
+                raw_amount
+            )
+
+        except ValueError:
+
+            bot.send_message(
+                message.chat.id,
+                "⚠️ Amount valid number hona chahiye."
+            )
+
+            return
 
         # ----------------------------------
         # MINIMUM AMOUNT
@@ -762,5 +704,5 @@ def register_qr(bot):
 
             bot.send_message(
                 message.chat.id,
-                "❌ QR send karte waqt error aa gaya."
+                "⚠️ QR send karte time error aa gaya."
             )
