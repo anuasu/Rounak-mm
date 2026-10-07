@@ -29,62 +29,180 @@ from commands.clean import (
     register_clean,
     install_message_tracker
 )
+
 from commands.refund import register_refund
 
-from commands.split import register_split
+# ==========================================
+# SPLIT
+# ==========================================
+
+from commands.split import (
+    register_split,
+    register_split_input
+)
 
 
-
+# ==========================================
 # DATABASE
+# ==========================================
+
 init_database()
 
 
+# ==========================================
 # BOT
-bot = telebot.TeleBot(BOT_TOKEN)
+# ==========================================
+
+bot = telebot.TeleBot(
+    BOT_TOKEN
+)
 
 
+# ==========================================
 # CLEAN MESSAGE TRACKER
-install_message_tracker(bot)
+# ==========================================
 
-# HANDLERS
-
-register_start_handlers(bot)
-register_user_message(bot)
-register_admin_reply(bot)
-
-register_leaderboard(bot)
-register_user_search(bot)
-
-register_deal(bot)
-register_removedeal(bot)
-
-register_payment(bot)
-register_mm_fee(bot)
-register_qr(bot)
-register_hold(bot)
-
-# RELEASE
-register_release(bot)
-register_refund(bot)
-register_split(bot)
+install_message_tracker(
+    bot
+)
 
 
-register_voucher(bot)
-register_form(bot)
+# ==========================================
+# SPLIT HANDLERS
+#
+# IMPORTANT:
+# Split handlers MUST be registered
+# before generic message handlers.
+# ==========================================
 
+register_split(
+    bot
+)
+
+register_split_input(
+    bot
+)
+
+
+# ==========================================
+# START / USER HANDLERS
+# ==========================================
+
+register_start_handlers(
+    bot
+)
+
+register_user_message(
+    bot
+)
+
+register_admin_reply(
+    bot
+)
+
+
+# ==========================================
+# LEADERBOARD
+# ==========================================
+
+register_leaderboard(
+    bot
+)
+
+register_user_search(
+    bot
+)
+
+
+# ==========================================
+# DEAL SYSTEM
+# ==========================================
+
+register_deal(
+    bot
+)
+
+register_removedeal(
+    bot
+)
+
+
+# ==========================================
+# PAYMENT / MM FEATURES
+# ==========================================
+
+register_payment(
+    bot
+)
+
+register_mm_fee(
+    bot
+)
+
+register_qr(
+    bot
+)
+
+register_hold(
+    bot
+)
+
+
+# ==========================================
+# RELEASE / REFUND
+# ==========================================
+
+register_release(
+    bot
+)
+
+register_refund(
+    bot
+)
+
+
+# ==========================================
+# VOUCHER / FORM
+# ==========================================
+
+register_voucher(
+    bot
+)
+
+register_form(
+    bot
+)
+
+
+# ==========================================
 # ADMIN PANEL
-register_admin_panel(bot)
-start_automatic_backup(bot)
+# ==========================================
+
+register_admin_panel(
+    bot
+)
+
+start_automatic_backup(
+    bot
+)
 
 
+# ==========================================
+# CLEAN COMMAND
+# ==========================================
 
-# CLEAN
-register_clean(bot)
+register_clean(
+    bot
+)
 
 
+# ==========================================
 # START BOT
+# ==========================================
 
-print("🤖 Rounak MM Bot is starting...")
+print(
+    "🤖 Rounak MM Bot is starting..."
+)
 
 
 bot.infinity_polling(
