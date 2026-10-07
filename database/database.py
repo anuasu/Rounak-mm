@@ -454,7 +454,6 @@ def update_payment(deal_id, amount, mm_fee=0):
 
         now = current_time()
 
-        # Payment received by MM
         total_received = amount + mm_fee
 
         cursor.execute("""
@@ -688,7 +687,7 @@ def get_active_deal(group_chat_id):
 
 
 # ==========================================
-# FINALIZE DEAL — SAFE
+# FINALIZE DEAL — FIXED
 # ==========================================
 
 def finalize_deal(
@@ -728,10 +727,10 @@ def finalize_deal(
             return False
 
         # ==================================
-        # ALREADY COMPLETED
+        # DEAL MUST STILL BE ACTIVE
         # ==================================
 
-        if deal["status"] == "completed":
+        if deal["status"] != "pending":
             connection.close()
             return False
 
@@ -740,7 +739,7 @@ def finalize_deal(
             return False
 
         # ==================================
-        # REAL AMOUNTS
+        # DEAL AMOUNTS
         # ==================================
 
         deal_amount = safe_amount(
@@ -760,23 +759,30 @@ def finalize_deal(
         )
 
         # ==================================
-        # FALLBACK
+        # DETERMINE AVAILABLE MONEY
         # ==================================
 
-        if deal_amount <= 0 and holding_amount > 0:
-            deal_amount = holding_amount
+        available_amount = 0.0
 
-        # ==================================
-        # ACTUAL MONEY AVAILABLE
-        # ==================================
+        if holding_amount > 0:
+            available_amount = holding_amount
 
-        max_transaction = max(
-            holding_amount,
-            total_received,
-            deal_amount
-        )
+        elif deal_amount > 0:
+            available_amount = deal_amount
 
-        if max_transaction <= 0:
+        elif total_received > 0:
+            available_amount = max(
+                0.0,
+                total_received - mm_fee
+            )
+
+        if available_amount <= 0:
+
+            print(
+                f"FINALIZE BLOCKED | "
+                f"Deal #{deal_id} has no available amount"
+            )
+
             connection.close()
             return False
 
@@ -801,18 +807,31 @@ def finalize_deal(
         total_final = amount_1 + amount_2
 
         # ==================================
-        # HARD SAFETY CHECK
+        # AMOUNT MUST BE VALID
         # ==================================
-        # Prevents:
-        # ₹100 deal -> ₹1000 refund
 
-        if total_final > max_transaction:
+        if total_final <= 0:
 
             print(
                 f"FINALIZE BLOCKED | "
                 f"Deal #{deal_id} | "
-                f"Requested ₹{total_final} | "
-                f"Available ₹{max_transaction}"
+                f"Final amount is zero"
+            )
+
+            connection.close()
+            return False
+
+        # ==================================
+        # NEVER PAY MORE THAN AVAILABLE
+        # ==================================
+
+        if total_final > available_amount:
+
+            print(
+                f"FINALIZE BLOCKED | "
+                f"Deal #{deal_id} | "
+                f"Requested {total_final} | "
+                f"Available {available_amount}"
             )
 
             connection.close()
@@ -957,13 +976,12 @@ def finalize_deal(
                 ))
 
         # ==================================
-        # COMPLETE DEAL
+        # COMPLETE DEAL ATOMICALLY
         # ==================================
 
         cursor.execute("""
             UPDATE deals
             SET
-                deal_amount = ?,
                 status = 'completed',
                 final_action = ?,
                 completed_at = ?,
@@ -984,17 +1002,23 @@ def finalize_deal(
             AND status = 'pending'
             AND final_action IS NULL
         """, (
-            deal_amount,
             action,
             now,
+
             action,
             now,
+
             action,
             now,
+
             deal_id
         ))
 
-        if cursor.rowcount == 0:
+        # ==================================
+        # COMPLETION FAILED
+        # ==================================
+
+        if cursor.rowcount != 1:
 
             connection.rollback()
             connection.close()
@@ -1005,6 +1029,11 @@ def finalize_deal(
         # MM LEADERBOARD
         # ==================================
 
+        leaderboard_amount = deal_amount
+
+        if leaderboard_amount <= 0:
+            leaderboard_amount = available_amount
+
         cursor.execute("""
             UPDATE leaderboard_stats
             SET
@@ -1012,11 +1041,11 @@ def finalize_deal(
                 total_amount = total_amount + ?
             WHERE id = 1
         """, (
-            deal_amount,
+            leaderboard_amount,
         ))
 
         # ==================================
-        # USER 1
+        # USER 1 LEADERBOARD
         # ==================================
 
         cursor.execute("""
@@ -1034,7 +1063,7 @@ def finalize_deal(
         ))
 
         # ==================================
-        # USER 2
+        # USER 2 LEADERBOARD
         # ==================================
 
         cursor.execute("""
@@ -1050,6 +1079,10 @@ def finalize_deal(
             now,
             user_2_id
         ))
+
+        # ==================================
+        # COMMIT EVERYTHING TOGETHER
+        # ==================================
 
         connection.commit()
         connection.close()
@@ -1085,6 +1118,10 @@ def record_release(
 
         amount = safe_amount(amount)
 
+        if amount <= 0:
+            connection.close()
+            return False
+
         cursor.execute("""
             SELECT *
             FROM deals
@@ -1097,14 +1134,19 @@ def record_release(
             connection.close()
             return False
 
-        if deal["status"] == "completed":
+        if deal["status"] != "pending":
+            connection.close()
+            return False
+
+        if deal["final_action"] is not None:
             connection.close()
             return False
 
         available = max(
             safe_amount(deal["holding_amount"]),
-            safe_amount(deal["total_received"]),
-            safe_amount(deal["deal_amount"])
+            safe_amount(deal["deal_amount"]),
+            safe_amount(deal["total_received"])
+            - safe_amount(deal["mm_fee"])
         )
 
         if amount > available:
@@ -1136,6 +1178,8 @@ def record_release(
             UPDATE deals
             SET release_at = ?
             WHERE deal_id = ?
+            AND status = 'pending'
+            AND final_action IS NULL
         """, (
             now,
             deal_id
@@ -1173,6 +1217,10 @@ def record_refund(
 
         amount = safe_amount(amount)
 
+        if amount <= 0:
+            connection.close()
+            return False
+
         cursor.execute("""
             SELECT *
             FROM deals
@@ -1185,17 +1233,21 @@ def record_refund(
             connection.close()
             return False
 
-        if deal["status"] == "completed":
+        if deal["status"] != "pending":
+            connection.close()
+            return False
+
+        if deal["final_action"] is not None:
             connection.close()
             return False
 
         available = max(
             safe_amount(deal["holding_amount"]),
-            safe_amount(deal["total_received"]),
-            safe_amount(deal["deal_amount"])
+            safe_amount(deal["deal_amount"]),
+            safe_amount(deal["total_received"])
+            - safe_amount(deal["mm_fee"])
         )
 
-        # Prevent impossible refund
         if amount > available:
             connection.close()
             return False
@@ -1225,6 +1277,8 @@ def record_refund(
             UPDATE deals
             SET refund_at = ?
             WHERE deal_id = ?
+            AND status = 'pending'
+            AND final_action IS NULL
         """, (
             now,
             deal_id
@@ -1265,6 +1319,10 @@ def record_split(
         refund_amount = safe_amount(refund_amount)
         release_amount = safe_amount(release_amount)
 
+        if refund_amount <= 0 and release_amount <= 0:
+            connection.close()
+            return False
+
         cursor.execute("""
             SELECT *
             FROM deals
@@ -1277,14 +1335,19 @@ def record_split(
             connection.close()
             return False
 
-        if deal["status"] == "completed":
+        if deal["status"] != "pending":
+            connection.close()
+            return False
+
+        if deal["final_action"] is not None:
             connection.close()
             return False
 
         available = max(
             safe_amount(deal["holding_amount"]),
-            safe_amount(deal["total_received"]),
-            safe_amount(deal["deal_amount"])
+            safe_amount(deal["deal_amount"]),
+            safe_amount(deal["total_received"])
+            - safe_amount(deal["mm_fee"])
         )
 
         if refund_amount + release_amount > available:
@@ -1355,6 +1418,7 @@ def record_split(
                 completed_at = ?,
                 refund_at = ?,
                 release_at = ?
+
             WHERE deal_id = ?
             AND status = 'pending'
             AND final_action IS NULL
@@ -1365,7 +1429,7 @@ def record_split(
             deal_id
         ))
 
-        if cursor.rowcount == 0:
+        if cursor.rowcount != 1:
 
             connection.rollback()
             connection.close()
@@ -1466,13 +1530,24 @@ def complete_deal(deal_id):
     if not deal:
         return False
 
-    if deal["status"] == "completed":
+    if deal["status"] != "pending":
         return False
 
-    amount = safe_amount(deal["deal_amount"])
+    amount = safe_amount(
+        deal["deal_amount"]
+    )
 
     if amount <= 0:
-        amount = safe_amount(deal["holding_amount"])
+        amount = safe_amount(
+            deal["holding_amount"]
+        )
+
+    if amount <= 0:
+        amount = max(
+            0,
+            safe_amount(deal["total_received"])
+            - safe_amount(deal["mm_fee"])
+        )
 
     return finalize_deal(
         deal_id,
