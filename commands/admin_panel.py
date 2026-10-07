@@ -751,8 +751,14 @@ def register_admin_panel(bot):
                 "📱 <code>.qr1</code> - <code>.qr10</code>\n"
                 "QR payment ke liye.\n\n"
 
-                "💸 <code>.payment amount</code>\n"
-                "Payment complete karne ke liye.\n\n"
+                                "💸 <code>.release amount</code>\n"
+                "Payment release karne ke liye.\n\n"
+
+                "↩️ <code>.refund amount</code>\n"
+                "Payment refund karne ke liye.\n\n"
+
+                "⚖️ <code>.split</code>\n"
+                "Payment ko release/refund mein split karne ke liye.\n\n"
 
                 "🧾 <code>.voucher amount</code>\n"
                 "Voucher generate karne ke liye.\n\n"
