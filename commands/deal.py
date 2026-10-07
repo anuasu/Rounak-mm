@@ -1,3 +1,5 @@
+import html
+
 from config import MM_CHAT_IDS, ADMIN_IDS
 
 from database.database import (
@@ -18,6 +20,21 @@ from commands.command_utils import (
 # ==========================================
 
 pending_deal_users = {}
+
+
+# ==========================================
+# HTML SAFE TEXT
+# ==========================================
+
+def safe_html(text):
+
+    if text is None:
+        return ""
+
+    return html.escape(
+        str(text),
+        quote=False
+    )
 
 
 # ==========================================
@@ -161,11 +178,20 @@ def register_deal(bot):
                 username=user.username or ""
             )
 
-            username = (
-                f"@{user.username}"
-                if user.username
-                else "No Username"
+            # HTML SAFE
+            user_name = safe_html(
+                user.first_name or "Unknown"
             )
+
+            if user.username:
+
+                username = safe_html(
+                    f"@{user.username}"
+                )
+
+            else:
+
+                username = "No Username"
 
             bot.reply_to(
                 message,
@@ -173,7 +199,7 @@ def register_deal(bot):
                     "🤝 <b>DEAL SETUP</b>\n\n"
 
                     "👤 <b>User 1:</b>\n"
-                    f"Name: {user.first_name or 'Unknown'}\n"
+                    f"Name: {user_name}\n"
                     f"Username: {username}\n"
                     f"🆔 <code>{user.id}</code>\n\n"
 
@@ -246,16 +272,36 @@ def register_deal(bot):
         # USERNAME
         # ==================================
 
-        user_1_username = (
-            f"@{deal_data['user_1_username']}"
-            if deal_data["user_1_username"]
-            else "No Username"
+        if deal_data["user_1_username"]:
+
+            user_1_username = safe_html(
+                f"@{deal_data['user_1_username']}"
+            )
+
+        else:
+
+            user_1_username = "No Username"
+
+        if user.username:
+
+            user_2_username = safe_html(
+                f"@{user.username}"
+            )
+
+        else:
+
+            user_2_username = "No Username"
+
+        # ==================================
+        # USER NAMES - HTML SAFE
+        # ==================================
+
+        user_1_name = safe_html(
+            deal_data["user_1_name"] or "Unknown"
         )
 
-        user_2_username = (
-            f"@{user.username}"
-            if user.username
-            else "No Username"
+        user_2_name = safe_html(
+            user.first_name or "Unknown"
         )
 
         # ==================================
@@ -277,12 +323,12 @@ def register_deal(bot):
                 "🤝 <b>DEAL ADDED</b>\n\n"
 
                 f"👤 <b>User 1:</b> "
-                f"{deal_data['user_1_name']}\n"
+                f"{user_1_name}\n"
                 f"🔗 {user_1_username}\n"
                 f"🆔 <code>{user_1_id}</code>\n\n"
 
                 f"👤 <b>User 2:</b> "
-                f"{user.first_name or 'Unknown'}\n"
+                f"{user_2_name}\n"
                 f"🔗 {user_2_username}\n"
                 f"🆔 <code>{user_2_id}</code>\n\n"
 
