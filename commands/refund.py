@@ -447,7 +447,7 @@ def register_refund(bot):
             group_id,
             (
                 f"<code>I vouch @RounakMM "
-                f"for refund {amount_text}</code>"
+                f"for MMD {amount_text}</code>"
             ),
             parse_mode="HTML"
         )
