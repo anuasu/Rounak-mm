@@ -29,67 +29,32 @@ def user_mention(user_id, name):
 
 
 # ==========================================
-# CLEAN USERNAME
+# GET REPLIED USER
 # ==========================================
 
-def clean_username(username):
+def get_replied_user(message):
 
-    username = username.strip()
+    if not message.reply_to_message:
+        return None
 
-    if username.startswith("@"):
-        username = username[1:]
+    replied_message = message.reply_to_message
 
-    return username.lower()
+    if not replied_message.from_user:
+        return None
+
+    return replied_message.from_user
 
 
 # ==========================================
-# FIND USER FROM CURRENT DEAL
+# CHECK USER IN CURRENT DEAL
 # ==========================================
 
-def find_deal_user(active_deal, username):
+def is_deal_user(active_deal, user_id):
 
-    username = clean_username(username)
-
-    user_1_id = active_deal["user_1_id"]
-    user_2_id = active_deal["user_2_id"]
-
-    # --------------------------------------
-    # USER 1
-    # --------------------------------------
-
-    user_1 = get_user(user_1_id)
-
-    if user_1:
-
-        saved_username = (
-            user_1["username"] or ""
-        )
-
-        if (
-            saved_username
-            and clean_username(saved_username) == username
-        ):
-            return user_1
-
-    # --------------------------------------
-    # USER 2
-    # --------------------------------------
-
-    user_2 = get_user(user_2_id)
-
-    if user_2:
-
-        saved_username = (
-            user_2["username"] or ""
-        )
-
-        if (
-            saved_username
-            and clean_username(saved_username) == username
-        ):
-            return user_2
-
-    return None
+    return user_id in (
+        active_deal["user_1_id"],
+        active_deal["user_2_id"]
+    )
 
 
 # ==========================================
@@ -155,30 +120,22 @@ def register_release(bot):
             return
 
         # ==================================
-        # COMMAND
-        #
-        # .release @username AMOUNT
-        #
-        # Example:
-        # .release @abc 500
+        # MUST REPLY
         # ==================================
 
-        command_text = normalize_command(
-            message.text
-        )
+        replied_user = get_replied_user(message)
 
-        parts = command_text.split()
-
-        if len(parts) != 3:
+        if not replied_user:
 
             bot.reply_to(
                 message,
                 (
-                    "⚠️ Release format galat hai.\n\n"
+                    "⚠️ Release ke liye deal user ke "
+                    "message par reply karo.\n\n"
                     "Use:\n"
-                    "<code>.release @username AMOUNT</code>\n\n"
+                    "<code>Reply to user → .release AMOUNT</code>\n\n"
                     "Example:\n"
-                    "<code>.release @abc 500</code>"
+                    "<code>.release 500</code>"
                 ),
                 parse_mode="HTML"
             )
@@ -191,16 +148,74 @@ def register_release(bot):
             return
 
         # ==================================
-        # USERNAME
+        # CHECK REPLIED USER
         # ==================================
 
-        username = parts[1]
+        release_user_id = replied_user.id
+
+        if not is_deal_user(
+            active_deal,
+            release_user_id
+        ):
+
+            bot.reply_to(
+                message,
+                (
+                    "⚠️ Jis user ke message par reply "
+                    "kiya hai wo current deal ka user nahi hai."
+                )
+            )
+
+            delete_command_message(
+                bot,
+                message
+            )
+
+            return
+
+        # ==================================
+        # COMMAND
+        #
+        # .release AMOUNT
+        #
+        # Example:
+        # .release 500
+        # .release ₹500
+        # .release $500
+        # ==================================
+
+        command_text = normalize_command(
+            message.text
+        )
+
+        parts = command_text.split()
+
+        if len(parts) != 2:
+
+            bot.reply_to(
+                message,
+                (
+                    "⚠️ Release format galat hai.\n\n"
+                    "Deal user ke message par reply karke:\n"
+                    "<code>.release AMOUNT</code>\n\n"
+                    "Example:\n"
+                    "<code>.release 500</code>"
+                ),
+                parse_mode="HTML"
+            )
+
+            delete_command_message(
+                bot,
+                message
+            )
+
+            return
 
         # ==================================
         # AMOUNT
         # ==================================
 
-        raw_amount = parts[2].strip()
+        raw_amount = parts[1].strip()
 
         currency = "₹"
 
@@ -219,7 +234,7 @@ def register_release(bot):
                 raw_amount
             )
 
-        except ValueError:
+        except (ValueError, TypeError):
 
             bot.reply_to(
                 message,
@@ -248,46 +263,11 @@ def register_release(bot):
             return
 
         # ==================================
-        # FIND USER FROM USERNAME
+        # GET OTHER USER
         # ==================================
-
-        release_user = find_deal_user(
-            active_deal,
-            username
-        )
-
-        if not release_user:
-
-            bot.reply_to(
-                message,
-                (
-                    "⚠️ Ye username current deal "
-                    "mein nahi mila.\n\n"
-                    "Example:\n"
-                    "<code>.release @username 500</code>"
-                ),
-                parse_mode="HTML"
-            )
-
-            delete_command_message(
-                bot,
-                message
-            )
-
-            return
-
-        # ==================================
-        # AUTOMATIC CHAT ID
-        # ==================================
-
-        release_user_id = release_user["chat_id"]
 
         user_1_id = active_deal["user_1_id"]
         user_2_id = active_deal["user_2_id"]
-
-        # ==================================
-        # OTHER USER
-        # ==================================
 
         if release_user_id == user_1_id:
 
@@ -298,7 +278,19 @@ def register_release(bot):
             other_user_id = user_1_id
 
         # ==================================
-        # SAVE / UPDATE USER DATA
+        # GET USER DATA
+        # ==================================
+
+        release_user = get_user(
+            release_user_id
+        )
+
+        other_user = get_user(
+            other_user_id
+        )
+
+        # ==================================
+        # SAVE / UPDATE USERS
         # ==================================
 
         try:
@@ -313,12 +305,21 @@ def register_release(bot):
 
             release_name = (
                 release_chat.first_name
-                or release_user["first_name"]
+                or (
+                    release_user["first_name"]
+                    if release_user
+                    else ""
+                )
                 or "User"
             )
 
             other_name = (
                 other_chat.first_name
+                or (
+                    other_user["first_name"]
+                    if other_user
+                    else ""
+                )
                 or "User"
             )
 
@@ -326,7 +327,11 @@ def register_release(bot):
                 release_user_id,
                 release_name,
                 release_chat.username
-                or release_user["username"]
+                or (
+                    release_user["username"]
+                    if release_user
+                    else ""
+                )
                 or ""
             )
 
@@ -334,6 +339,11 @@ def register_release(bot):
                 other_user_id,
                 other_name,
                 other_chat.username
+                or (
+                    other_user["username"]
+                    if other_user
+                    else ""
+                )
                 or ""
             )
 
@@ -345,33 +355,58 @@ def register_release(bot):
 
             release_name = (
                 release_user["first_name"]
-                or "User"
-            )
+                if release_user
+                else ""
+            ) or replied_user.first_name or "User"
 
-            other_name = "User"
+            other_name = (
+                other_user["first_name"]
+                if other_user
+                else ""
+            ) or "User"
 
         # ==================================
         # FINALIZE DEAL
         #
-        # BOTH users:
-        # +1 deal
-        # SAME amount
+        # IMPORTANT:
+        # Release amount goes ONLY to
+        # the replied user.
+        #
+        # Other user gets 0 here.
         # ==================================
 
         success = finalize_deal(
             active_deal["deal_id"],
             "release",
             {
-                user_1_id: release_amount,
-                user_2_id: release_amount
+                user_1_id: (
+                    release_amount
+                    if release_user_id == user_1_id
+                    else 0
+                ),
+
+                user_2_id: (
+                    release_amount
+                    if release_user_id == user_2_id
+                    else 0
+                )
             }
         )
+
+        # ==================================
+        # FAILED
+        # ==================================
 
         if not success:
 
             bot.reply_to(
                 message,
-                "❌ Release process complete nahi ho saka."
+                (
+                    "❌ Release complete nahi ho saka.\n\n"
+                    "Possible reason:\n"
+                    "• Deal already completed ho sakti hai.\n"
+                    "• Amount available amount se zyada ho sakta hai."
+                )
             )
 
             delete_command_message(
@@ -470,8 +505,8 @@ def register_release(bot):
                 f"🤝 Deal: <b>#{active_deal['deal_id']}</b>\n"
                 f"👤 Released To: {release_mention}\n"
                 f"💰 Amount: <b>{amount_text}</b>\n"
-                f"🕐 Release recorded successfully.\n\n"
-                "📊 Leaderboard updated for both users."
+                "🕐 Release recorded successfully.\n\n"
+                "📊 Leaderboard updated."
             ),
             parse_mode="HTML"
         )
