@@ -16,7 +16,6 @@ from commands.payment import register_payment
 from commands.mm_fee import register_mm_fee
 from commands.qr import register_qr
 from commands.hold import register_hold
-from commands.release import register_release
 from commands.voucher import register_voucher
 from commands.form import register_form
 
@@ -30,6 +29,11 @@ from commands.clean import (
     install_message_tracker
 )
 
+# ==========================================
+# NORMAL RELEASE / REFUND
+# ==========================================
+
+from commands.release import register_release
 from commands.refund import register_refund
 
 # ==========================================
@@ -62,138 +66,111 @@ bot = telebot.TeleBot(
 # CLEAN MESSAGE TRACKER
 # ==========================================
 
-install_message_tracker(
-    bot
-)
+install_message_tracker(bot)
 
 
-# ==========================================
+# ==========================================================
 # SPLIT HANDLERS
 #
 # IMPORTANT:
-# Split handlers MUST be registered
-# before generic message handlers.
-# ==========================================
+# These MUST be registered BEFORE:
+# - normal release handler
+# - normal refund handler
+# - generic user handlers
+#
+# Split flow:
+#
+# .split
+#      ↓
+# .release 80  (reply to release user)
+#      ↓
+# .refund 120  (reply to refund user)
+#      ↓
+# SPLIT COMPLETED
+# ==========================================================
 
-register_split(
-    bot
-)
+register_split(bot)
 
-register_split_input(
-    bot
-)
+register_split_input(bot)
 
 
 # ==========================================
 # START / USER HANDLERS
 # ==========================================
 
-register_start_handlers(
-    bot
-)
+register_start_handlers(bot)
 
-register_user_message(
-    bot
-)
+register_user_message(bot)
 
-register_admin_reply(
-    bot
-)
+register_admin_reply(bot)
 
 
 # ==========================================
 # LEADERBOARD
 # ==========================================
 
-register_leaderboard(
-    bot
-)
+register_leaderboard(bot)
 
-register_user_search(
-    bot
-)
+register_user_search(bot)
 
 
 # ==========================================
 # DEAL SYSTEM
 # ==========================================
 
-register_deal(
-    bot
-)
+register_deal(bot)
 
-register_removedeal(
-    bot
-)
+register_removedeal(bot)
 
 
 # ==========================================
 # PAYMENT / MM FEATURES
 # ==========================================
 
-register_payment(
-    bot
-)
+register_payment(bot)
 
-register_mm_fee(
-    bot
-)
+register_mm_fee(bot)
 
-register_qr(
-    bot
-)
+register_qr(bot)
 
-register_hold(
-    bot
-)
+register_hold(bot)
 
 
 # ==========================================
-# RELEASE / REFUND
+# NORMAL RELEASE / REFUND
+#
+# IMPORTANT:
+# Keep these AFTER SPLIT handlers.
 # ==========================================
 
-register_release(
-    bot
-)
+register_release(bot)
 
-register_refund(
-    bot
-)
+register_refund(bot)
 
 
 # ==========================================
 # VOUCHER / FORM
 # ==========================================
 
-register_voucher(
-    bot
-)
+register_voucher(bot)
 
-register_form(
-    bot
-)
+register_form(bot)
 
 
 # ==========================================
 # ADMIN PANEL
 # ==========================================
 
-register_admin_panel(
-    bot
-)
+register_admin_panel(bot)
 
-start_automatic_backup(
-    bot
-)
+start_automatic_backup(bot)
 
 
 # ==========================================
 # CLEAN COMMAND
 # ==========================================
 
-register_clean(
-    bot
-)
+register_clean(bot)
 
 
 # ==========================================
