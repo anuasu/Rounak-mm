@@ -72,21 +72,20 @@ install_message_tracker(bot)
 # ==========================================================
 # SPLIT HANDLERS
 #
-# IMPORTANT:
-# These MUST be registered BEFORE:
-# - normal release handler
-# - normal refund handler
-# - generic user handlers
-#
 # Split flow:
 #
 # .split
 #      ↓
-# .release 80  (reply to release user)
+# Reply to release user:
+# .r 80
 #      ↓
-# .refund 120  (reply to refund user)
+# Reply to refund user:
+# .f 120
 #      ↓
 # SPLIT COMPLETED
+#
+# Split handlers are registered BEFORE normal
+# release/refund and generic handlers.
 # ==========================================================
 
 register_split(bot)
@@ -139,8 +138,15 @@ register_hold(bot)
 # ==========================================
 # NORMAL RELEASE / REFUND
 #
-# IMPORTANT:
-# Keep these AFTER SPLIT handlers.
+# These remain separate from Split.
+#
+# Normal:
+# .release
+# .refund
+#
+# Split:
+# .r
+# .f
 # ==========================================
 
 register_release(bot)
