@@ -92,13 +92,9 @@ def format_amount(amount, currency="₹"):
 def get_deal_user(active_deal, user_id):
 
     if not active_deal:
-
         return None
 
-    # IMPORTANT:
-    # sqlite3.Row does NOT support .get()
-    # So direct [] access is used.
-
+    # sqlite3.Row safe access
     if user_id == active_deal["user_1_id"]:
 
         return get_user(
@@ -137,9 +133,9 @@ def get_replied_user(message):
 
         return None
 
-    replied_message = message.reply_to_message
-
-    replied_user = replied_message.from_user
+    replied_user = (
+        message.reply_to_message.from_user
+    )
 
     if not replied_user:
 
@@ -221,14 +217,10 @@ def register_split(bot):
 
             return
 
-        # ------------------------------------------------------
-        # SQLITE ROW SAFE DEAL ID
-        # ------------------------------------------------------
-
         active_deal_id = active_deal["deal_id"]
 
         # ------------------------------------------------------
-        # OLD / EXISTING STATE
+        # OLD STATE
         # ------------------------------------------------------
 
         old_data = pending_split.get(
@@ -237,20 +229,16 @@ def register_split(bot):
 
         if old_data:
 
-            old_deal_id = old_data.get(
-                "deal_id"
-            )
-
-            # Same deal already running
-            if old_deal_id == active_deal_id:
+            if old_data.get("deal_id") == active_deal_id:
 
                 bot.reply_to(
                     message,
                     (
                         "⚠️ <b>Split already setup hai.</b>\n\n"
-                        "Ab <code>.split</code> dobara mat likho.\n\n"
+
                         "Release ke liye:\n"
                         "<code>.r AMOUNT</code>\n\n"
+
                         "Refund ke liye:\n"
                         "<code>.f AMOUNT</code>"
                     ),
@@ -264,21 +252,23 @@ def register_split(bot):
 
                 return
 
-            # Different/old deal
+            # Old deal state clear
             pending_split.pop(
                 group_id,
                 None
             )
 
         # ------------------------------------------------------
-        # CREATE NEW STATE
+        # CREATE STATE
         # ------------------------------------------------------
 
         pending_split[group_id] = {
 
-            "deal_id": active_deal_id,
+            "deal_id":
+                active_deal_id,
 
-            "step": "release"
+            "step":
+                "release"
         }
 
         # ------------------------------------------------------
@@ -325,9 +315,8 @@ def register_split_input(bot):
             and message.text
             and normalize_command(
                 message.text
-            ).strip().lower().startswith(
-                (".r", ".f")
-            )
+            ).strip().lower().split()[0]
+            in (".r", ".f")
         )
     )
     def split_reply_handler(message):
@@ -352,7 +341,6 @@ def register_split_input(bot):
 
         if not data:
 
-            # No active split
             return
 
         # ======================================================
@@ -377,21 +365,8 @@ def register_split_input(bot):
 
             return
 
-        # ======================================================
-        # IMPORTANT SQLITE FIX
-        # ======================================================
-        #
-        # NEVER:
-        #
-        # active_deal.get("deal_id")
-        #
-        # sqlite3.Row does not have .get()
-        #
-        # Use:
-        #
-        # active_deal["deal_id"]
-        #
-
+        # IMPORTANT:
+        # sqlite3.Row has no .get()
         active_deal_id = active_deal["deal_id"]
 
         if data.get("deal_id") != active_deal_id:
@@ -428,10 +403,6 @@ def register_split_input(bot):
 
         command = parts[0].lower()
 
-        # ======================================================
-        # ONLY .R / .F
-        # ======================================================
-
         if command not in (
             ".r",
             ".f"
@@ -440,39 +411,29 @@ def register_split_input(bot):
             return
 
         # ======================================================
-        # AMOUNT REQUIRED
+        # AMOUNT
         # ======================================================
 
         if len(parts) != 2:
 
-            if command == ".r":
+            bot.reply_to(
+                message,
+                (
+                    "⚠️ Correct format:\n\n"
 
-                bot.reply_to(
-                    message,
-                    (
-                        "⚠️ Correct format:\n"
-                        "<code>.r 80</code>\n\n"
-                        "User ke message ko reply karke bhejo."
-                    ),
-                    parse_mode="HTML"
-                )
+                    "<code>.r 80</code>\n"
+                    "or\n"
+                    "<code>.f 120</code>\n\n"
 
-            else:
-
-                bot.reply_to(
-                    message,
-                    (
-                        "⚠️ Correct format:\n"
-                        "<code>.f 120</code>\n\n"
-                        "User ke message ko reply karke bhejo."
-                    ),
-                    parse_mode="HTML"
-                )
+                    "User ke message ko reply karke bhejo."
+                ),
+                parse_mode="HTML"
+            )
 
             return
 
         # ======================================================
-        # MUST REPLY TO USER
+        # MUST REPLY
         # ======================================================
 
         replied_user = get_replied_user(
@@ -485,6 +446,7 @@ def register_split_input(bot):
                 message,
                 (
                     "⚠️ <b>User ke message ko reply karo.</b>\n\n"
+
                     "Example:\n"
                     "<code>.r 80</code>"
                 ),
@@ -496,7 +458,7 @@ def register_split_input(bot):
         replied_user_id = replied_user.id
 
         # ======================================================
-        # PARSE AMOUNT
+        # AMOUNT
         # ======================================================
 
         amount, currency = parse_amount(
@@ -524,7 +486,7 @@ def register_split_input(bot):
         if command == ".r":
 
             # --------------------------------------------------
-            # MUST BE RELEASE STEP
+            # STEP CHECK
             # --------------------------------------------------
 
             if data.get("step") != "release":
@@ -533,8 +495,10 @@ def register_split_input(bot):
                     message,
                     (
                         "⚠️ Release already received.\n\n"
-                        "Ab refund user ke message ko reply karke:\n"
-                        "<code>.f AMOUNT</code> bhejo."
+
+                        "Ab refund user ke message ko "
+                        "reply karke:\n"
+                        "<code>.f AMOUNT</code>"
                     ),
                     parse_mode="HTML"
                 )
@@ -542,7 +506,7 @@ def register_split_input(bot):
                 return
 
             # --------------------------------------------------
-            # CHECK RELEASE USER
+            # CHECK USER
             # --------------------------------------------------
 
             release_user = get_deal_user(
@@ -570,6 +534,16 @@ def register_split_input(bot):
                 release_user["first_name"]
                 or replied_user.first_name
                 or "User"
+            )
+
+            release_mention = user_mention(
+                replied_user_id,
+                release_name
+            )
+
+            release_text = format_amount(
+                amount,
+                currency
             )
 
             # --------------------------------------------------
@@ -606,6 +580,10 @@ def register_split_input(bot):
                 (
                     "↩️ <b>NOW REFUND USER</b>\n\n"
 
+                    f"💸 <b>Release:</b> "
+                    f"{release_mention} — "
+                    f"<b>{release_text}</b>\n\n"
+
                     "💸 Refund wale user ke message ko "
                     "reply karke:\n\n"
 
@@ -634,7 +612,7 @@ def register_split_input(bot):
         if command == ".f":
 
             # --------------------------------------------------
-            # MUST BE REFUND STEP
+            # STEP CHECK
             # --------------------------------------------------
 
             if data.get("step") != "refund":
@@ -642,7 +620,7 @@ def register_split_input(bot):
                 bot.reply_to(
                     message,
                     (
-                        "⚠️ Pehle release amount submit karo:\n"
+                        "⚠️ Pehle release submit karo:\n"
                         "<code>.r AMOUNT</code>"
                     ),
                     parse_mode="HTML"
@@ -708,7 +686,8 @@ def register_split_input(bot):
 
             success = record_split(
 
-                deal_id=data["deal_id"],
+                deal_id=
+                    data["deal_id"],
 
                 refund_user_id=
                     refund_user_id,
@@ -743,7 +722,7 @@ def register_split_input(bot):
                 return
 
             # ==================================================
-            # TOTAL VOUCHER AMOUNT
+            # AMOUNTS
             # ==================================================
 
             release_amount = data[
@@ -767,9 +746,9 @@ def register_split_input(bot):
             )
 
             final_currency = (
-                currency
-                if currency != "₹"
-                else release_currency
+                release_currency
+                if currency == "₹"
+                else currency
             )
 
             # ==================================================
@@ -792,15 +771,6 @@ def register_split_input(bot):
             )
 
             # ==================================================
-            # CLEAR STATE
-            # ==================================================
-
-            pending_split.pop(
-                group_id,
-                None
-            )
-
-            # ==================================================
             # MENTIONS
             # ==================================================
 
@@ -815,7 +785,16 @@ def register_split_input(bot):
             )
 
             # ==================================================
-            # PAYMENT MESSAGE
+            # CLEAR STATE
+            # ==================================================
+
+            pending_split.pop(
+                group_id,
+                None
+            )
+
+            # ==================================================
+            # MMD PAYMENT
             # ==================================================
 
             payment_message = bot.send_message(
@@ -823,11 +802,13 @@ def register_split_input(bot):
                 (
                     "💸 <b>MMD PAYMENT</b>\n\n"
 
-                    f"💰 {release_text} → "
-                    f"{release_mention}\n"
+                    f"💸 <b>Release:</b> "
+                    f"{release_mention} → "
+                    f"{release_text}\n"
 
-                    f"↩️ {refund_text} → "
-                    f"{refund_mention}\n\n"
+                    f"↩️ <b>Refund:</b> "
+                    f"{refund_mention} → "
+                    f"{refund_text}\n\n"
 
                     f"💵 <b>Total: {total_text}</b>\n\n"
 
@@ -873,7 +854,7 @@ def register_split_input(bot):
             except Exception as error:
 
                 print(
-                    f"Split voucher message error: {error}"
+                    f"Split voucher error: {error}"
                 )
 
             # ==================================================
@@ -901,7 +882,7 @@ def register_split_input(bot):
                 )
 
             # ==================================================
-            # SPLIT INFORMATION
+            # FINAL SPLIT INFORMATION
             # ==================================================
 
             try:
@@ -911,12 +892,12 @@ def register_split_input(bot):
                     (
                         "✂️ <b>SPLIT COMPLETED</b>\n\n"
 
-                        f"💸 <b>Release:</b> "
-                        f"{release_mention} — "
-                        f"{release_text}\n"
+                        f"💸 <b>Release:</b>\n"
+                        f"   {release_mention} — "
+                        f"{release_text}\n\n"
 
-                        f"↩️ <b>Refund:</b> "
-                        f"{refund_mention} — "
+                        f"↩️ <b>Refund:</b>\n"
+                        f"   {refund_mention} — "
                         f"{refund_text}\n\n"
 
                         f"💰 <b>Total MMD Payment:</b> "
