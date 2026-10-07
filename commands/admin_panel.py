@@ -16,12 +16,20 @@ from database.database import (
     get_daily_summary,
     get_deals_by_date,
     get_deal_events,
+    get_deal_history_with_users,
+    get_deal_events_with_users,
     get_mm_stats,
     get_total_users,
     get_active_users
 )
 
+
+# ==========================================
+# WAITING STATES
+# ==========================================
+
 broadcast_waiting = set()
+history_date_waiting = set()
 
 
 # ==========================================
@@ -138,6 +146,152 @@ def stats_keyboard():
     )
 
     return keyboard
+
+
+# ==========================================
+# DEAL HISTORY KEYBOARD
+# ==========================================
+
+def deal_history_keyboard():
+
+    keyboard = types.InlineKeyboardMarkup(
+        row_width=1
+    )
+
+    keyboard.add(
+        types.InlineKeyboardButton(
+            "🔎 Search Date",
+            callback_data="history_search_date"
+        )
+    )
+
+    keyboard.add(
+        types.InlineKeyboardButton(
+            "📅 Today",
+            callback_data="stats_history_today"
+        )
+    )
+
+    keyboard.add(
+        types.InlineKeyboardButton(
+            "⬅️ Back",
+            callback_data="admin_stats"
+        )
+    )
+
+    return keyboard
+
+
+# ==========================================
+# SHOW DEAL HISTORY
+# ==========================================
+
+def show_deal_history(
+    bot,
+    chat_id,
+    message_id,
+    date_text
+):
+
+    deals = get_deals_by_date(
+        date_text
+    )
+
+    # ======================================
+    # NO DEALS
+    # ======================================
+
+    if not deals:
+
+        text = (
+            "📋 <b>DEAL HISTORY</b>\n\n"
+            f"📅 Date: <b>{date_text}</b>\n\n"
+            "❌ Is date par koi deal nahi mili."
+        )
+
+        bot.edit_message_text(
+            text,
+            chat_id,
+            message_id,
+            reply_markup=deal_history_keyboard(),
+            parse_mode="HTML"
+        )
+
+        return
+
+
+    # ======================================
+    # DEAL LIST
+    # ======================================
+
+    lines = [
+        "📋 <b>DEAL HISTORY</b>",
+        "",
+        f"📅 Date: <b>{date_text}</b>",
+        "",
+        f"🤝 Total Deals: <b>{len(deals)}</b>",
+        ""
+    ]
+
+    keyboard = types.InlineKeyboardMarkup(
+        row_width=1
+    )
+
+    for deal in deals:
+
+        if deal["status"] == "completed":
+            status = "✅ Completed"
+        else:
+            status = "⏳ Pending"
+
+        lines.append(
+            f"🤝 <b>Deal #{deal['deal_id']}</b>"
+        )
+
+        lines.append(
+            f"💰 Amount: ₹{float(deal['deal_amount'] or 0):g}"
+        )
+
+        lines.append(
+            f"📌 Status: {status}"
+        )
+
+        if deal["final_action"]:
+
+            lines.append(
+                f"⚡ Action: <b>{str(deal['final_action']).upper()}</b>"
+            )
+
+        lines.append("")
+
+        keyboard.add(
+            types.InlineKeyboardButton(
+                f"🤝 Deal #{deal['deal_id']}",
+                callback_data=f"history_deal_{deal['deal_id']}"
+            )
+        )
+
+    keyboard.add(
+        types.InlineKeyboardButton(
+            "🔎 Search Another Date",
+            callback_data="history_search_date"
+        )
+    )
+
+    keyboard.add(
+        types.InlineKeyboardButton(
+            "⬅️ Back",
+            callback_data="admin_stats"
+        )
+    )
+
+    bot.edit_message_text(
+        "\n".join(lines),
+        chat_id,
+        message_id,
+        reply_markup=keyboard,
+        parse_mode="HTML"
+    )
 
 
 # ==========================================
@@ -405,6 +559,19 @@ def register_admin_panel(bot):
 
         bot.answer_callback_query(call.id)
 
+        broadcast_waiting.add(
+            call.from_user.id
+        )
+
+        keyboard = types.InlineKeyboardMarkup()
+
+        keyboard.add(
+            types.InlineKeyboardButton(
+                "❌ Cancel Broadcast",
+                callback_data="cancel_broadcast"
+            )
+        )
+
         bot.send_message(
             call.message.chat.id,
             (
@@ -413,11 +580,48 @@ def register_admin_panel(bot):
                 "ab woh message send karo.\n\n"
                 "⚠️ Text, photo, video ya document bhej sakte ho."
             ),
+            reply_markup=keyboard,
             parse_mode="HTML"
         )
 
-        broadcast_waiting.add(
+
+    # ======================================
+    # CANCEL BROADCAST
+    # ======================================
+
+    @bot.callback_query_handler(
+        func=lambda call:
+        call.data == "cancel_broadcast"
+    )
+    def cancel_broadcast(call):
+
+        if call.from_user.id not in ADMIN_IDS:
+
+            bot.answer_callback_query(
+                call.id,
+                "❌ Access denied.",
+                show_alert=True
+            )
+            return
+
+        broadcast_waiting.discard(
             call.from_user.id
+        )
+
+        bot.answer_callback_query(
+            call.id,
+            "Broadcast cancelled."
+        )
+
+        bot.edit_message_text(
+            (
+                "❌ <b>BROADCAST CANCELLED</b>\n\n"
+                "Broadcast nahi bheja gaya."
+            ),
+            call.message.chat.id,
+            call.message.message_id,
+            reply_markup=admin_panel_keyboard(),
+            parse_mode="HTML"
         )
 
 
@@ -464,8 +668,10 @@ def register_admin_panel(bot):
 
         bot.reply_to(
             message,
-            "📢 Broadcast start ho gaya...\n\n"
-            "⏳ Please wait."
+            (
+                "📢 Broadcast start ho gaya...\n\n"
+                "⏳ Please wait."
+            )
         )
 
         for user in users:
@@ -632,7 +838,7 @@ def register_admin_panel(bot):
         )
 
         def money(value):
-            return f"₹{float(value):g}"
+            return f"₹{float(value or 0):g}"
 
         text = (
             "📊 <b>TODAY'S REPORT</b>\n\n"
@@ -644,7 +850,7 @@ def register_admin_panel(bot):
             f"• Completed: <b>{stats['completed_deals']}</b>\n"
             f"• Pending: <b>{stats['pending_deals']}</b>\n\n"
 
-            "💰 <b>PAYMENT</b>\n"
+            "💰 <b>AMOUNTS</b>\n"
             f"• Deal Amount: <b>{money(stats['total_amount'])}</b>\n"
             f"• Payment: <b>{money(stats['total_payment'])}</b>\n"
             f"• Hold: <b>{money(stats['total_hold'])}</b>\n\n"
@@ -718,7 +924,7 @@ def register_admin_panel(bot):
 
             "🤝 <b>MM DEALS</b>\n"
             f"• Total Deals: <b>{total_deals}</b>\n"
-            f"• Total Amount: <b>₹{float(total_amount):g}</b>\n\n"
+            f"• Total Amount: <b>₹{float(total_amount or 0):g}</b>\n\n"
 
             "👥 <b>USERS</b>\n"
             f"• Total Users: <b>{total_users}</b>\n"
@@ -768,58 +974,307 @@ def register_admin_panel(bot):
             "%Y-%m-%d"
         )
 
-        deals = get_deals_by_date(
+        show_deal_history(
+            bot,
+            call.message.chat.id,
+            call.message.message_id,
             today
+        )
+
+
+    # ======================================
+    # TODAY HISTORY
+    # ======================================
+
+    @bot.callback_query_handler(
+        func=lambda call:
+        call.data == "stats_history_today"
+    )
+    def stats_history_today(call):
+
+        if call.from_user.id not in ADMIN_IDS:
+
+            bot.answer_callback_query(
+                call.id,
+                "❌ Access denied.",
+                show_alert=True
+            )
+            return
+
+        bot.answer_callback_query(call.id)
+
+        today = datetime.now().strftime(
+            "%Y-%m-%d"
+        )
+
+        show_deal_history(
+            bot,
+            call.message.chat.id,
+            call.message.message_id,
+            today
+        )
+
+
+    # ======================================
+    # SEARCH DEAL HISTORY BY DATE
+    # ======================================
+
+    @bot.callback_query_handler(
+        func=lambda call:
+        call.data == "history_search_date"
+    )
+    def history_search_date(call):
+
+        if call.from_user.id not in ADMIN_IDS:
+
+            bot.answer_callback_query(
+                call.id,
+                "❌ Access denied.",
+                show_alert=True
+            )
+            return
+
+        bot.answer_callback_query(call.id)
+
+        history_date_waiting.add(
+            call.from_user.id
+        )
+
+        keyboard = types.InlineKeyboardMarkup()
+
+        keyboard.add(
+            types.InlineKeyboardButton(
+                "❌ Cancel",
+                callback_data="cancel_history_search"
+            )
+        )
+
+        bot.send_message(
+            call.message.chat.id,
+            (
+                "🔎 <b>SEARCH DEAL HISTORY</b>\n\n"
+                "Jis date ki deals check karni hain "
+                "woh date send karo.\n\n"
+
+                "Example:\n"
+                "<code>18-10-2026</code>\n"
+                "<code>18/10/2026</code>\n"
+                "<code>2026-10-18</code>"
+            ),
+            reply_markup=keyboard,
+            parse_mode="HTML"
+        )
+
+
+    # ======================================
+    # CANCEL DATE SEARCH
+    # ======================================
+
+    @bot.callback_query_handler(
+        func=lambda call:
+        call.data == "cancel_history_search"
+    )
+    def cancel_history_search(call):
+
+        if call.from_user.id not in ADMIN_IDS:
+
+            bot.answer_callback_query(
+                call.id,
+                "❌ Access denied.",
+                show_alert=True
+            )
+            return
+
+        history_date_waiting.discard(
+            call.from_user.id
+        )
+
+        bot.answer_callback_query(
+            call.id,
+            "Search cancelled."
+        )
+
+        bot.edit_message_text(
+            (
+                "❌ <b>SEARCH CANCELLED</b>\n\n"
+                "Deal history search cancel kar diya gaya."
+            ),
+            call.message.chat.id,
+            call.message.message_id,
+            reply_markup=stats_keyboard(),
+            parse_mode="HTML"
+        )
+
+
+    # ======================================
+    # RECEIVE HISTORY DATE
+    # ======================================
+
+    @bot.message_handler(
+        func=lambda message:
+        message.from_user.id in history_date_waiting,
+        content_types=["text"]
+    )
+    def receive_history_date(message):
+
+        if message.from_user.id not in ADMIN_IDS:
+            return
+
+        history_date_waiting.discard(
+            message.from_user.id
+        )
+
+        date_input = message.text.strip()
+
+        parsed_date = None
+
+        date_formats = [
+            "%d-%m-%Y",
+            "%d/%m/%Y",
+            "%Y-%m-%d"
+        ]
+
+        for date_format in date_formats:
+
+            try:
+
+                parsed_date = datetime.strptime(
+                    date_input,
+                    date_format
+                )
+
+                break
+
+            except ValueError:
+                continue
+
+        if parsed_date is None:
+
+            keyboard = types.InlineKeyboardMarkup()
+
+            keyboard.add(
+                types.InlineKeyboardButton(
+                    "🔎 Try Again",
+                    callback_data="history_search_date"
+                )
+            )
+
+            keyboard.add(
+                types.InlineKeyboardButton(
+                    "⬅️ Back",
+                    callback_data="admin_stats"
+                )
+            )
+
+            bot.reply_to(
+                message,
+                (
+                    "❌ <b>INVALID DATE</b>\n\n"
+                    "Date is format mein send karo:\n"
+                    "<code>18-10-2026</code>\n"
+                    "<code>18/10/2026</code>\n"
+                    "<code>2026-10-18</code>"
+                ),
+                reply_markup=keyboard,
+                parse_mode="HTML"
+            )
+
+            return
+
+        date_text = parsed_date.strftime(
+            "%Y-%m-%d"
+        )
+
+        # Send history in a new message
+        deals = get_deals_by_date(
+            date_text
         )
 
         if not deals:
 
-            text = (
-                "📋 <b>DEAL HISTORY</b>\n\n"
-                f"📅 {today}\n\n"
-                "❌ Aaj koi deal nahi mili."
+            keyboard = types.InlineKeyboardMarkup()
+
+            keyboard.add(
+                types.InlineKeyboardButton(
+                    "🔎 Search Another Date",
+                    callback_data="history_search_date"
+                )
             )
 
-        else:
-
-            lines = [
-                "📋 <b>DEAL HISTORY</b>",
-                "",
-                f"📅 {today}",
-                ""
-            ]
-
-            for deal in deals:
-
-                status = (
-                    "✅ Completed"
-                    if deal["status"] == "completed"
-                    else "⏳ Pending"
+            keyboard.add(
+                types.InlineKeyboardButton(
+                    "⬅️ Back",
+                    callback_data="admin_stats"
                 )
+            )
+
+            bot.send_message(
+                message.chat.id,
+                (
+                    "📋 <b>DEAL HISTORY</b>\n\n"
+                    f"📅 Date: <b>{date_text}</b>\n\n"
+                    "❌ Is date par koi deal nahi mili."
+                ),
+                reply_markup=keyboard,
+                parse_mode="HTML"
+            )
+
+            return
+
+        lines = [
+            "📋 <b>DEAL HISTORY</b>",
+            "",
+            f"📅 Date: <b>{date_text}</b>",
+            "",
+            f"🤝 Total Deals: <b>{len(deals)}</b>",
+            ""
+        ]
+
+        keyboard = types.InlineKeyboardMarkup(
+            row_width=1
+        )
+
+        for deal in deals:
+
+            status = (
+                "✅ Completed"
+                if deal["status"] == "completed"
+                else "⏳ Pending"
+            )
+
+            lines.append(
+                f"🤝 <b>Deal #{deal['deal_id']}</b>"
+            )
+
+            lines.append(
+                f"💰 Amount: ₹{float(deal['deal_amount'] or 0):g}"
+            )
+
+            lines.append(
+                f"📌 Status: {status}"
+            )
+
+            if deal["final_action"]:
 
                 lines.append(
-                    f"🤝 <b>Deal #{deal['deal_id']}</b>"
+                    f"⚡ Action: <b>{str(deal['final_action']).upper()}</b>"
                 )
 
-                lines.append(
-                    f"💰 Amount: ₹{float(deal['deal_amount'] or 0):g}"
+            lines.append("")
+
+            keyboard.add(
+                types.InlineKeyboardButton(
+                    f"🤝 Deal #{deal['deal_id']}",
+                    callback_data=f"history_deal_{deal['deal_id']}"
                 )
+            )
 
-                lines.append(
-                    f"📌 Status: {status}"
-                )
-
-                if deal["final_action"]:
-
-                    lines.append(
-                        f"⚡ Action: <b>{deal['final_action']}</b>"
-                    )
-
-                lines.append("")
-
-            text = "\n".join(lines)
-
-        keyboard = types.InlineKeyboardMarkup()
+        keyboard.add(
+            types.InlineKeyboardButton(
+                "🔎 Search Another Date",
+                callback_data="history_search_date"
+            )
+        )
 
         keyboard.add(
             types.InlineKeyboardButton(
@@ -828,8 +1283,261 @@ def register_admin_panel(bot):
             )
         )
 
+        bot.send_message(
+            message.chat.id,
+            "\n".join(lines),
+            reply_markup=keyboard,
+            parse_mode="HTML"
+        )
+
+
+    # ======================================
+    # FULL DEAL DETAILS
+    # ======================================
+
+    @bot.callback_query_handler(
+        func=lambda call:
+        call.data.startswith("history_deal_")
+    )
+    def history_deal_details(call):
+
+        if call.from_user.id not in ADMIN_IDS:
+
+            bot.answer_callback_query(
+                call.id,
+                "❌ Access denied.",
+                show_alert=True
+            )
+            return
+
+        bot.answer_callback_query(call.id)
+
+        try:
+
+            deal_id = int(
+                call.data.replace(
+                    "history_deal_",
+                    ""
+                )
+            )
+
+        except ValueError:
+
+            bot.answer_callback_query(
+                call.id,
+                "Invalid deal.",
+                show_alert=True
+            )
+            return
+
+        deal = get_deal_history_with_users(
+            deal_id
+        )
+
+        if not deal:
+
+            bot.answer_callback_query(
+                call.id,
+                "Deal not found.",
+                show_alert=True
+            )
+            return
+
+        events = get_deal_events_with_users(
+            deal_id
+        )
+
+        def money(value):
+
+            return f"₹{float(value or 0):g}"
+
+
+        def user_name(
+            user_id,
+            first_name,
+            username
+        ):
+
+            if username:
+                return f"@{username}"
+
+            if first_name:
+                return first_name
+
+            if user_id:
+                return str(user_id)
+
+            return "Unknown"
+
+
+        user1 = user_name(
+            deal["user_1_id"],
+            deal["user_1_name"],
+            deal["user_1_username"]
+        )
+
+        user2 = user_name(
+            deal["user_2_id"],
+            deal["user_2_name"],
+            deal["user_2_username"]
+        )
+
+
+        status = (
+            "✅ Completed"
+            if deal["status"] == "completed"
+            else "⏳ Pending"
+        )
+
+
+        lines = [
+            "📋 <b>DEAL DETAILS</b>",
+            "",
+            f"🤝 Deal ID: <b>#{deal['deal_id']}</b>",
+            f"📌 Status: <b>{status}</b>",
+            "",
+            "👥 <b>USERS</b>",
+            f"• User 1: <b>{user1}</b>",
+            f"• User 2: <b>{user2}</b>",
+            "",
+            "💰 <b>AMOUNTS</b>",
+            f"• Deal Amount: <b>{money(deal['deal_amount'])}</b>",
+            f"• MM Fee: <b>{money(deal['mm_fee'])}</b>",
+            f"• Total Received: <b>{money(deal['total_received'])}</b>",
+            f"• Holding: <b>{money(deal['holding_amount'])}</b>",
+            "",
+            "🕒 <b>TIME</b>",
+            f"• Created: <code>{deal['created_at'] or '-'}</code>",
+            f"• Hold: <code>{deal['hold_at'] or '-'}</code>",
+            f"• Release: <code>{deal['release_at'] or '-'}</code>",
+            f"• Refund: <code>{deal['refund_at'] or '-'}</code>",
+            f"• Completed: <code>{deal['completed_at'] or '-'}</code>",
+            ""
+        ]
+
+
+        # ==================================
+        # FINAL ACTION
+        # ==================================
+
+        if deal["final_action"]:
+
+            lines.extend([
+                "⚡ <b>FINAL ACTION</b>",
+                f"• {str(deal['final_action']).upper()}",
+                ""
+            ])
+
+
+        # ==================================
+        # TRANSACTION EVENTS
+        # ==================================
+
+        if events:
+
+            lines.extend([
+                "📜 <b>TRANSACTION HISTORY</b>",
+                ""
+            ])
+
+            for event in events:
+
+                event_type = event["event_type"]
+
+                event_user = user_name(
+                    event["user_id"],
+                    event["first_name"],
+                    event["username"]
+                )
+
+                amount = money(
+                    event["amount"]
+                )
+
+
+                if event_type == "created":
+
+                    icon = "🆕"
+                    title = "Deal Created"
+
+                elif event_type == "payment":
+
+                    icon = "💳"
+                    title = "Payment"
+
+                elif event_type == "hold":
+
+                    icon = "⏸️"
+                    title = "Payment Hold"
+
+                elif event_type == "release":
+
+                    icon = "💸"
+                    title = "Release"
+
+                elif event_type == "refund":
+
+                    icon = "↩️"
+                    title = "Refund"
+
+                elif event_type == "split_release":
+
+                    icon = "💸"
+                    title = "Split Release"
+
+                elif event_type == "split_refund":
+
+                    icon = "↩️"
+                    title = "Split Refund"
+
+                else:
+
+                    icon = "📌"
+                    title = event_type
+
+
+                lines.append(
+                    f"{icon} <b>{title}</b>"
+                )
+
+
+                if event["user_id"]:
+
+                    lines.append(
+                        f"• User: <b>{event_user}</b>"
+                    )
+
+
+                lines.append(
+                    f"• Amount: <b>{amount}</b>"
+                )
+
+
+                if event["mm_fee"]:
+
+                    lines.append(
+                        f"• MM Fee: <b>{money(event['mm_fee'])}</b>"
+                    )
+
+
+                lines.append(
+                    f"• Time: <code>{event['event_time']}</code>"
+                )
+
+                lines.append("")
+
+
+        keyboard = types.InlineKeyboardMarkup()
+
+        keyboard.add(
+            types.InlineKeyboardButton(
+                "⬅️ Back to Deal History",
+                callback_data="stats_history"
+            )
+        )
+
         bot.edit_message_text(
-            text,
+            "\n".join(lines),
             call.message.chat.id,
             call.message.message_id,
             reply_markup=keyboard,
@@ -932,8 +1640,13 @@ def automatic_backup(bot):
                         )
 
                 try:
-                    os.remove(backup_file)
+
+                    os.remove(
+                        backup_file
+                    )
+
                 except Exception:
+
                     pass
 
                 time.sleep(60)
