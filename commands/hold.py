@@ -1,3 +1,5 @@
+import html
+
 from config import MM_CHAT_IDS, ADMIN_IDS
 
 from database.database import (
@@ -52,12 +54,29 @@ def calculate_mm_fee(amount):
 
 
 # ==========================================
+# HTML SAFE TEXT
+# ==========================================
+
+def safe_html(text):
+
+    if text is None:
+        return ""
+
+    return html.escape(
+        str(text),
+        quote=False
+    )
+
+
+# ==========================================
 # USER MENTION
 # ==========================================
 
 def user_mention(user_id, name):
 
-    name = name or "User"
+    name = safe_html(
+        name or "User"
+    )
 
     return (
         f'<a href="tg://user?id={user_id}">'
