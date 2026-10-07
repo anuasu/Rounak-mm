@@ -1,4 +1,5 @@
 import re
+import html
 
 from config import MM_CHAT_IDS, ADMIN_IDS
 
@@ -54,6 +55,21 @@ def calculate_mm_fee(amount):
 
 
 # ==========================================
+# SAFE HTML
+# ==========================================
+
+def safe_html(text):
+
+    if text is None:
+        return ""
+
+    return html.escape(
+        str(text),
+        quote=False
+    )
+
+
+# ==========================================
 # USER MENTION
 # ==========================================
 
@@ -61,9 +77,11 @@ def user_mention(user_id, name):
 
     name = name or "User"
 
+    safe_name = safe_html(name)
+
     return (
         f'<a href="tg://user?id={user_id}">'
-        f'{name}'
+        f'{safe_name}'
         f'</a>'
     )
 
@@ -166,12 +184,20 @@ def register_qr(bot):
 
     def receive_qr_image(message, qr_number):
 
+        # ----------------------------------
+        # PERMISSION
+        # ----------------------------------
+
         if (
             message.from_user.id not in MM_CHAT_IDS
             and
             message.from_user.id not in ADMIN_IDS
         ):
             return
+
+        # ----------------------------------
+        # CHECK PHOTO
+        # ----------------------------------
 
         if not message.photo:
 
@@ -198,10 +224,25 @@ def register_qr(bot):
         # SAVE QR
         # ----------------------------------
 
-        set_qr(
-            qr_number,
-            image_file_id
-        )
+        try:
+
+            set_qr(
+                qr_number,
+                image_file_id
+            )
+
+        except Exception as error:
+
+            print(
+                f"QR save error: {error}"
+            )
+
+            bot.send_message(
+                message.chat.id,
+                "❌ QR save karte time error aa gaya."
+            )
+
+            return
 
         # ----------------------------------
         # ASK UPI
@@ -252,7 +293,7 @@ def register_qr(bot):
     def receive_upi(message, qr_number):
 
         # ----------------------------------
-        # BUTTON / NON TEXT
+        # TEXT CHECK
         # ----------------------------------
 
         if not message.text:
@@ -273,7 +314,7 @@ def register_qr(bot):
         upi_id = message.text.strip()
 
         # ----------------------------------
-        # EMPTY
+        # EMPTY CHECK
         # ----------------------------------
 
         if not upi_id:
@@ -295,8 +336,31 @@ def register_qr(bot):
         # SAVE UPI
         # ----------------------------------
 
-        set_qr_upi(
-            qr_number,
+        try:
+
+            set_qr_upi(
+                qr_number,
+                upi_id
+            )
+
+        except Exception as error:
+
+            print(
+                f"QR UPI save error: {error}"
+            )
+
+            bot.send_message(
+                message.chat.id,
+                "❌ UPI ID save karte time error aa gaya."
+            )
+
+            return
+
+        # ----------------------------------
+        # SAFE UPI
+        # ----------------------------------
+
+        safe_upi = safe_html(
             upi_id
         )
 
@@ -310,7 +374,7 @@ def register_qr(bot):
                 f"✅ <b>QR {qr_number} UPDATED</b>\n\n"
                 "📱 QR: <b>Saved</b>\n"
                 "💳 UPI ID:\n"
-                f"<code>{upi_id}</code>\n\n"
+                f"<code>{safe_upi}</code>\n\n"
                 f"Use <code>.qr{qr_number} amount</code> "
                 "in your deal."
             ),
@@ -361,10 +425,25 @@ def register_qr(bot):
         # SAVE NO UPI
         # ----------------------------------
 
-        set_qr_upi(
-            qr_number,
-            None
-        )
+        try:
+
+            set_qr_upi(
+                qr_number,
+                None
+            )
+
+        except Exception as error:
+
+            print(
+                f"QR no UPI save error: {error}"
+            )
+
+            bot.answer_callback_query(
+                call.id,
+                "Error saving QR."
+            )
+
+            return
 
         bot.answer_callback_query(
             call.id,
@@ -398,7 +477,7 @@ def register_qr(bot):
 
 
     # ======================================
-    # .qr1 ... .qr10
+    # QR PAYMENT COMMAND
     #
     # SUPPORTED:
     #
@@ -407,6 +486,7 @@ def register_qr(bot):
     # .  qr1 500
     # .   QR1   500
     # .qr10 1000
+    # . QR10 1000
     #
     # ======================================
 
@@ -459,6 +539,7 @@ def register_qr(bot):
         # . qr1 500
         # .  qr1 500
         # .   QR1   500
+        # .qr10 1000
         # ----------------------------------
 
         match = re.match(
@@ -494,7 +575,7 @@ def register_qr(bot):
             )
 
         # ----------------------------------
-        # AMOUNT
+        # CLEAN AMOUNT
         # ----------------------------------
 
         raw_amount = (
@@ -503,6 +584,10 @@ def register_qr(bot):
             .replace(",", "")
             .strip()
         )
+
+        # ----------------------------------
+        # AMOUNT
+        # ----------------------------------
 
         try:
 
@@ -548,6 +633,10 @@ def register_qr(bot):
             )
 
             return
+
+        # ----------------------------------
+        # TOTAL
+        # ----------------------------------
 
         total = amount + fee
 
@@ -600,10 +689,14 @@ def register_qr(bot):
 
         if upi_id:
 
+            safe_upi = safe_html(
+                upi_id
+            )
+
             upi_text = (
                 "\n\n"
                 "💳 <b>UPI ID</b>\n"
-                f"<code>{upi_id}</code>"
+                f"<code>{safe_upi}</code>"
             )
 
         else:
@@ -649,6 +742,10 @@ def register_qr(bot):
 
             user_1_name = "User 1"
             user_2_name = "User 2"
+
+        # ----------------------------------
+        # MENTIONS
+        # ----------------------------------
 
         mention_1 = user_mention(
             user_1_id,
